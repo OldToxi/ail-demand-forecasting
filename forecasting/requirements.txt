@@ -1,0 +1,15 @@
+# Forecasting module requirements - PINNED. Installed in a SEPARATE venv (planning-app/.venv-forecast)
+# so the existing app environment is never changed. pandas pinned to 2.2.x (pandas 3 breaks many wheels).
+pandas==2.2.3
+numpy==2.1.3
+scipy==1.14.1
+pyarrow==17.0.0
+openpyxl==3.1.5
+PyYAML==6.0.2
+pytest==8.3.4
+# model libraries (used from Stage 2/3); installed in the same venv
+statsmodels==0.14.4
+scikit-learn==1.5.2
+statsforecast==1.7.8
+lightgbm==4.5.0
+# zero-shot models are pinned in requirements-zeroshot.txt (weights cached locally, CPU)

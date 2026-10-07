@@ -1,0 +1,26 @@
+# Forecasting run configuration (paths, horizon, seeds, budget)
+horizon_months: 12
+horizon_buckets: {short: [1, 3], medium: [4, 6], long: [7, 12]}
+seed: 42
+
+# where the raw AIL sources and external files live (repo-root relative)
+data_dir: Data/AIL
+external_dir: Data/AIL/ail_external
+
+# final forecast window (first month to forecast) and holdout (never used for selection)
+forecast_start: "2026-10"
+final_holdout: ["2026-04", "2026-09"]        # evaluated once, from origin 2026-03
+backtest_origins: ["2024-12", "2026-02"]     # monthly origins; targets after 2026-03 discarded
+holdout_origin: "2026-03"
+
+provisional_months: ["2026-09"]              # DQ-09: last month provisional
+# interventions per series (configurable): slump from DQ-31
+interventions:
+  "AIL|channel|Trade":       {slump: ["2024-07", "2025-06"]}
+  "AIL|channel|Corporate":   {slump: ["2024-07", "2025-06"]}
+  "AIL|sbu|external":        {slump: ["2024-07", "2025-06"]}
+  default:                   {}
+
+# performance budget (seconds) per model on CPU; skip gracefully if exceeded
+model_time_budget_seconds: 240
+run_time_budget_seconds: 1800

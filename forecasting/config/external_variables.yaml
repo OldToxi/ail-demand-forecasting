@@ -1,0 +1,48 @@
+# External-data registry. Primary source of truth = anwar_group_external_variables.csv (catalog);
+# this file supplies the column-level details (lag, future-value type, transform) keyed by feature_key.
+# The loader cross-checks against the catalog when present and warns if a key is missing.
+catalog_file: Data/AIL/ail_external/anwar_group_external_variables.csv
+monthly_file: Data/AIL/ail_external/ail_external_monthly.csv
+segments_all: ALL
+
+variables:
+  # ---- calendar / known in advance (all SBUs) ----
+  - {feature_key: eid_fitr_closure_days,  column: eid_fitr_closure_days,  lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: eid_adha_closure_days,  column: eid_adha_closure_days,  lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: eid_closure_days_total, column: eid_closure_days_total, lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: eid_closure_days_last10,column: eid_closure_days_last10,lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: eid_month_flag,         column: eid_month_flag,         lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: ramadan_days,           column: ramadan_days,           lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: public_holiday_weekdays,column: public_holiday_weekdays,lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: working_days_6day,      column: working_days_6day,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: working_days_5day,      column: working_days_5day,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: fy_end_flag,            column: fy_end_flag,            lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: monsoon_flag,           column: monsoon_flag,           lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: dry_season_flag,        column: dry_season_flag,        lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: boro_harvest_flag,      column: boro_harvest_flag,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: aman_harvest_flag,      column: aman_harvest_flag,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: election_month_flag,    column: election_month_flag,    lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: election_window_flag,   column: election_window_flag,   lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  # ---- caveat flags (carried, not model inputs) ----
+  - {feature_key: calendar_provisional_flag, column: calendar_provisional_flag, lag: 0, type: check_only, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: lc_interpolated_flag,      column: lc_interpolated_flag,      lag: 0, type: check_only, transform: none, segments: [STEEL], enabled: true}
+  # ---- intervention / constraint (scenario or flag) ----
+  - {feature_key: disruption_days_full,    column: disruption_days_full,    lag: 0, type: scenario_only,   transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: disruption_days_partial, column: disruption_days_partial, lag: 0, type: scenario_only,   transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: flood_event_flag,        column: flood_event_flag,        lag: 0, type: constraint_flag, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: flood_major_flag,        column: flood_major_flag,        lag: 0, type: constraint_flag, transform: none, segments: [STEEL], enabled: true}
+  # ---- budget / tax (known until next budget) ----
+  - {feature_key: rod_vat_tk_per_t,        column: rod_vat_tk_per_t,        lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: scrap_import_tax_tk_per_t, column: scrap_import_tax_tk_per_t, lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: steel_budget_change_flag, column: steel_budget_change_flag, lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true}
+  # ---- leading indicators (publication lag; lagged features only) ----
+  - {feature_key: remittance_usd_mn,            column: remittance_usd_mn,            lag: 2, type: leading, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: lc_open_raw_materials_usd_mn, column: lc_open_raw_materials_usd_mn, lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: lc_open_capital_machinery_usd_mn, column: lc_open_capital_machinery_usd_mn, lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: usd_bdt_avg,                  column: usd_bdt_avg,                  lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: cpi_inflation_p2p_pct,        column: cpi_inflation_p2p_pct,        lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
+  # ---- ADP (annual level; Corporate only) ----
+  - {feature_key: adp_fy_revised_tk_cr,   column: adp_fy_revised_tk_cr,   lag: 0, type: known_in_advance, transform: annual_level, segments: [STEEL], enabled: true, channels: [Corporate]}
+  - {feature_key: adp_fy_original_tk_cr,  column: adp_fy_original_tk_cr,  lag: 0, type: known_in_advance, transform: annual_level, segments: [STEEL], enabled: true, channels: [Corporate]}
+  # ---- rainfall (built by fetch_rainfall.py if runnable) ----
+  - {feature_key: rainfall_anomaly_pct,   column: rainfall_anomaly_pct,   lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true, file: planning-app/data/outputs/forecast/external/ail_rainfall_monthly.csv}
