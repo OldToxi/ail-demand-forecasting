@@ -1,0 +1,40 @@
+# ---- confidential / data (never commit) ----
+data/
+Data/
+**/data/outputs/
+**/data/interim/
+**/data/raw/
+*.xlsx
+*.xls
+*.parquet
+*.csv
+!forecasting/templates/*.csv      # planner upload template only
+# ---- generated outputs / model caches / weights ----
+forecasting/**/outputs/
+forecasting/**/.cache/
+**/model_weights/
+**/*.pt
+**/*.pth
+**/*.safetensors
+**/*.ckpt
+**/*.onnx
+# ---- environments ----
+.venv/
+.venv-forecast/
+venv/
+env/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+# ---- node / next ----
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+# ---- local db / secrets ----
+*.sqlite3
+.env
+.env.*
+*.key
+*.pem
+secrets/
