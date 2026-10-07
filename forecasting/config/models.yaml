@@ -1,0 +1,20 @@
+# Model registry config: which models run, params, and capability gates. Toggle enabled flags only.
+models:
+  - {name: naive,          enabled: true}
+  - {name: seasonal_naive, enabled: true}
+  - {name: ma3,            enabled: true}
+  - {name: ma6,            enabled: true}
+  - {name: drift,          enabled: true}
+  - {name: ets,            enabled: true}
+  - {name: stl_ets,        enabled: true}
+  - {name: theta,          enabled: true}
+  - {name: sarimax,        enabled: true}
+  - {name: structural,     enabled: true}
+  - {name: lightgbm,       enabled: true, params: {objective: regression, n_estimators: 300, learning_rate: 0.05, num_leaves: 15, verbose: -1, random_state: 42}}
+  - {name: croston_sba,    enabled: true, accounts_only: true}
+  - {name: tsb,            enabled: true, accounts_only: true}
+  - {name: hurdle,         enabled: true, accounts_only: true}
+  # zero-shot: enabled but skipped gracefully if the backend/weights are unavailable
+  - {name: timesfm,        enabled: true, zero_shot: true}
+  - {name: chronos_bolt,   enabled: true, zero_shot: true}
+  - {name: moirai,         enabled: true, zero_shot: true}
