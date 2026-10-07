@@ -9,4 +9,8 @@ urlpatterns = [
     path("demand-planning/market-target", views.market_target),
     path("production/units", views.production_units),
     path("production/materials", views.production_materials),
+    # AIL demand-forecasting (new; read-only)
+    path("forecast/ui", views.forecast_ui),
+    path("forecast/template", views.forecast_template),
+    path("forecast/planner", views.forecast_planner_list),
 ]

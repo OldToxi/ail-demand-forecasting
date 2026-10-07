@@ -36,6 +36,8 @@ DP_OUT = OUT / "demand_planning"
 DATA_OUT = OUT / "data"
 
 PY = sys.executable
+VENV = ROOT / ".venv-forecast" / "Scripts" / "python.exe"     # forecasting runs in its own pinned venv
+AIL = ROOT.parent / "Data" / "AIL"
 
 # a stage = list of steps; a step = (label, script, cwd, required inputs, produced outputs)
 STAGES = {
@@ -58,8 +60,17 @@ STAGES = {
          [RAW / "National Sales Data_Cement.xlsx", RAW / "cement_data.parquet"],
          [DP_OUT / "market_target.json"]),
     ],
+    # NEW: AIL steel demand forecasting (separate venv; does not touch the cement artifacts)
+    "forecast": [
+        ("AIL demand forecast", "__forecast__", ROOT,
+         [AIL / "AIL Corporate Monthly Data-2023-2026.xlsx",
+          AIL / "AIL-Intercompany_-2023_2026.xlsx",
+          AIL / "AIL-Trade_monthly-2023 to 26.xlsx",
+          AIL / "ail_external" / "ail_external_monthly.csv"],
+         [OUT / "forecast" / "ui" / "forecast_ui.json"]),
+    ],
 }
-ORDER = ["production", "demand-forecast", "demand-planning"]
+ORDER = ["production", "demand-forecast", "demand-planning", "forecast"]
 
 
 def _missing(inputs):
@@ -88,8 +99,16 @@ def run_stage(name, strict=False):
                 print(f"        {p.relative_to(ROOT)}")
             ok = False
             continue
-        print(f"  RUN  {label}: python {script}")
-        r = subprocess.run([PY, script], cwd=str(cwd))
+        if script == "__forecast__":
+            if not VENV.exists():
+                print(f"  SKIP {label}: forecasting venv not found at {VENV}")
+                ok = False
+                continue
+            print(f"  RUN  {label}: {VENV.name} -m forecasting.run_forecast")
+            r = subprocess.run([str(VENV), "-m", "forecasting.run_forecast"], cwd=str(cwd))
+        else:
+            print(f"  RUN  {label}: python {script}")
+            r = subprocess.run([PY, script], cwd=str(cwd))
         if r.returncode != 0:
             print(f"  FAIL {label} (exit {r.returncode})")
             ok = False

@@ -6,6 +6,7 @@ const links = [
   { href: "/demand-forecast-planning", label: "Demand Forecast" },
   { href: "/demand-planning", label: "Demand Planning" },
   { href: "/production", label: "Production Planning" },
+  { href: "/ail-forecast", label: "AIL Forecast" },
 ];
 
 export default function Nav() {

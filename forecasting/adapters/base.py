@@ -55,10 +55,12 @@ class LocationGazetteer:
 
 
 def read_raw(source_cfg, base_dir) -> pd.DataFrame:
-    path = source_cfg["file"] if str(source_cfg["file"]).startswith(("Data", "/")) else source_cfg["file"]
+    path = base_dir / source_cfg["file"]
     header = source_cfg.get("header_row", 1) - 1
-    df = pd.read_excel(base_dir / source_cfg["file"], sheet_name=source_cfg.get("sheet"),
-                       header=header)
+    if str(path).lower().endswith(".csv"):
+        df = pd.read_csv(path, header=header)
+    else:
+        df = pd.read_excel(path, sheet_name=source_cfg.get("sheet"), header=header)
     # drop trailing junk columns from the export
     return df.loc[:, [c for c in df.columns if not str(c).startswith("Unnamed")]]
 
