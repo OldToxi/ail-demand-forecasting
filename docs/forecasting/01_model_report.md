@@ -54,3 +54,24 @@ not win.
 - External-variable tests, Eid-variant comparison, structural-break comparison, sensitivity (DQ-30),
   scenarios, hierarchy reconciliation (MinT), final holdout, UI wiring and the new-SBU demonstration
   remain (Stages 4-6).
+
+## Stage 4 results (run 20261007T092722Z)
+- **External-variable screening (LightGBM, one at a time, rule: >=3% better in a bucket and <=1% worse elsewhere):**
+  - emittance_usd_mn -> **keep** for Corporate, Trade, company, external and all Trade zones.
+  - lc_open_raw_materials_usd_mn -> **keep** for Intercompany, Trade, Trade|Dhaka.
+  - disruption_days_full/partial, dp_fy_revised_tk_cr -> **drop** (no bucket-level gain).
+  - ainfall_anomaly_pct -> **not screened** (lives in a separate rainfall file; load path pending).
+- **Selection:** top-3 per series x bucket by WAPE (bias tie-break), fallback to seasonal naive when nothing beats it (none triggered on aggregate).
+- **Structural-break / Eid variants:** compared (ets / stl_ets / structural + intervention; eid total vs last10 vs month-flag) - see break_eid_variants.json.
+- **Reconciliation:** aggregate series reconcile by construction; bottom-up for company (external channels + intercompany).
+- **Sensitivity (DQ-30):** Trade ETS WAPE 0.3704 full vs **1.0548** when 2025-01..11 are dropped -> the 2025 regime is material; flagged.
+- **Final forecast:** 12 months **2026-10..2027-09** x 9 aggregate series x 3 scenarios (base/disruption/flood).
+- **Final holdout (2026-04..09 from origin 2026-03): WAPE 0.2217** (evaluated once, not used for selection).
+
+### Stage 4 limitations to carry forward
+- Scenario shocks are currently placeholder multipliers; they must be re-expressed as exog (disruption days /
+  flood flag) for exog-capable models.
+- Interval calibration uses a residual-sigma band; empirical 80/95% coverage + conformal adjustment pending
+  (needs persisted signed residuals).
+- Account-level (top-accounts) path is implemented but not yet run end-to-end.
+- Rainfall variable needs to be loaded from its own file in the screening.
