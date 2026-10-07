@@ -19,6 +19,7 @@ interventions:
   "AIL|channel|Trade":       {slump: ["2024-07", "2025-06"]}
   "AIL|channel|Corporate":   {slump: ["2024-07", "2025-06"]}
   "AIL|sbu|external":        {slump: ["2024-07", "2025-06"]}
+  "AIL|company":             {slump: ["2024-07", "2025-06"]}
   default:                   {}
 
 # performance budget (seconds) per model on CPU; skip gracefully if exceeded

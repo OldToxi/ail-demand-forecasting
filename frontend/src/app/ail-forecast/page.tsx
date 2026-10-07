@@ -22,6 +22,8 @@ type UIPayload = {
   holdout: { wape_all?: number; origin?: string; targets?: string[] };
   series: { series_id: string; level: string; channel: string; zone: string; label: string }[];
   detail: Record<string, Detail>;
+  accounts?: { account: string; series_id: string; last12: { month: string; actual_mt: number }[]; forecast: { month: string; point: number; q10: number; q90: number }[] }[];
+  accounts_summary?: { bottom_up_12m_total?: number; direct_12m_total?: number; pct_difference?: number; selection?: string };
 };
 
 export default function AilForecast() {
@@ -30,6 +32,7 @@ export default function AilForecast() {
   const [sid, setSid] = useState<string>("AIL|sbu|external");
   const [scenario, setScenario] = useState<string>("base");
   const [adjust, setAdjust] = useState<{ series_id: string; month: string; statistical_forecast_mt: number | null; adjusted_forecast_mt: number; reason: string; entered_by: string }[]>([]);
+  const [showAcct, setShowAcct] = useState(false);
 
   useEffect(() => {
     apiGet<UIPayload>("/forecast/ui").then(setD).catch((e) => setErr(String(e)));
@@ -159,6 +162,52 @@ export default function AilForecast() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* corporate top accounts (collapsible) */}
+      {d.accounts && d.accounts.length > 0 && (
+        <div className="card">
+          <button className="flex items-center gap-2 text-sm font-medium"
+                  onClick={() => setShowAcct(!showAcct)}>
+            <span style={{ transform: showAcct ? "rotate(90deg)" : "none", display: "inline-block" }}>▶</span>
+            Corporate top accounts ({d.accounts.length})
+            {d.accounts_summary && (
+              <span className="chip" style={{ marginLeft: 8 }}>
+                bottom-up vs direct: {d.accounts_summary.pct_difference}% · selected {d.accounts_summary.selection}
+              </span>
+            )}
+          </button>
+          {showAcct && (
+            <div className="overflow-x-auto mt-3">
+              <table className="tbl w-full text-xs">
+                <thead>
+                  <tr>
+                    <th>account</th>
+                    <th className="text-right">last 12m actual (MT)</th>
+                    {d.accounts[0].forecast.map((f) => <th key={f.month} className="text-right">{f.month}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.accounts.map((a) => (
+                    <tr key={a.series_id}>
+                      <td>{a.account}</td>
+                      <td className="text-right font-mono">{fmt(a.last12.reduce((s, x) => s + x.actual_mt, 0))}</td>
+                      {a.forecast.map((f) => (
+                        <td key={f.month} className="text-right font-mono">{fmt(f.point)}
+                          <div className="text-[10px]" style={{ color: "var(--muted)" }}>{fmt(f.q10)}–{fmt(f.q90)}</div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+                Intermittent models (Croston-SBA / TSB / hurdle) per account; band is a residual estimate.
+                Planner adjustments may target an account {`series_id`} via the template.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

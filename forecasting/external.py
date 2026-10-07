@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 KNOWN = "known_in_advance"
@@ -102,9 +103,18 @@ def last_available_month(var: dict, origin: pd.Period) -> pd.Period | None:
     return None                          # not a base feature
 
 
+def intervention_frame(series_id: str, cfg: dict, index: pd.PeriodIndex) -> pd.DataFrame:
+    """Intervention dummy columns for a series (e.g. slump): 1 inside the window, 0 elsewhere.
+    In a forecast the window is in the past, so future values are 0 (settled), never extrapolated."""
+    spec = (cfg.get("interventions") or {}).get(series_id) or (cfg.get("interventions") or {}).get("default", {})
+    if not spec:
+        return pd.DataFrame(index=index)
+    cols = {name: np.isin(index, pd.period_range(a, b, freq="M")).astype(float) for name, (a, b) in spec.items()}
+    return pd.DataFrame(cols, index=index)
+
+
 def augment_with_files(monthly: pd.DataFrame, registry: dict, repo_root) -> pd.DataFrame:
     """Merge any external variable stored in its own file (e.g. rainfall) into the monthly frame."""
-    from pathlib import Path
     out = monthly.copy()
     for v in registry["variables"]:
         f = v.get("file")

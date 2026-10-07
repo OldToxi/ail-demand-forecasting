@@ -75,3 +75,75 @@ not win.
   (needs persisted signed residuals).
 - Account-level (top-accounts) path is implemented but not yet run end-to-end.
 - Rainfall variable needs to be loaded from its own file in the screening.
+
+---
+
+# CHECKPOINT-2 REVISION (diagnostics + fixes)
+
+## 1. Model diagnostics & fixes
+Diagnostics (orecasting/diagnostics.py, data/outputs/forecast/diagnostics/*): actual-vs-forecast for
+every model at origins 2024-12, 2025-06, 2026-02 for Corporate, Trade and Trade|Dhaka, plus exog-alignment
+and intervention checks. Findings and fixes:
+- **Structural** was producing 31,636 / 205,095 / 0 (local-linear-trend slope extrapolation on a series with
+  a level break). **Fixed**: local level (no slope) + monthly seasonality, no exog, clipped to [0, 3x train max].
+  WAPE **0.992 -> 0.412**.
+- **SARIMAX** was unstable on the full collinear calendar exog. **Fixed**: a small exog whitelist
+  (eid total, working_days_6day, fy_end, monsoon, dry, slump, disruption, flood) + clipping. WAPE **0.745 -> 0.528**.
+- **STL+ETS** had a seasonal-indexing bug ((len+i)%12 instead of calendar-month alignment). **Fixed**; it
+  remains the weakest model (0.649) because the ETS trend struggles with the 2024-25 level break - a genuine
+  result, not a bug; selection does not pick it.
+- **Intervention dummies** added per series (slump 2024-07..2025-06) via external.intervention_frame,
+  **0 in the forecast period** (never extended). Applied to company too.
+- Exog alignment verified: calendar features align to the target month; known-in-advance future values only.
+
+**Corrected leaderboard (mean overall WAPE, aggregate series):**
+naive 0.377 | ets 0.378 | ma3 0.379 | ma6 0.403 | **structural 0.412** | lightgbm 0.440 | theta 0.454 |
+drift 0.502 | seasonal_naive 0.516 | **sarimax 0.528** | stl_ets 0.649.
+
+## 2. External-variable tests (strict)
+Tested against the **best exog-capable base model** (SARIMAX/LightGBM) per series; keep only if pooled WAPE
+improves >= 3% **and** the variable wins in >= 2/3 of individual origins. **All Intercompany external
+variables dropped.** remittance also tested detrended (YoY %).
+Result - 4 keeps: Corporate **remittance_usd_mn_yoy** (0.345 -> 0.274), Trade|Dhaka **remittance_usd_mn**
+(0.471 -> 0.451) and **lc_open_raw_materials_usd_mn** (0.471 -> 0.452), Trade|North East **remittance_usd_mn**
+(0.543 -> 0.512). Everything else drops. (The Corporate result on the **YoY** form shows remittance is not
+merely acting as a trend proxy there.)
+
+## 3. Sensitivity (DQ-30) - no series cut
+Trade 12-month forecast changed by **+1.7% (down-weighted 2025, soft blend)** and **+6.0% (2025 imputed from
+the 2023-24 seasonal pattern scaled to level)** vs the base 153,008 MT. Seasonality preserved.
+
+## 4. Backtest vs holdout
+Best-model backtest WAPE for **horizons 1-6 (same window as the holdout) = 0.272**; horizons 1-12 = 0.339;
+holdout (origin 2026-03) = 0.222. The "0.38 vs 0.22" gap is because the aggregate 1-12 backtest spans the
+2024-25 slump and includes thin months 7-12. **Confirmed in writing: holdout months 2026-04..09 were never
+used for selection, tuning or variable choice** (the backtest discards any target after 2026-03; enforced by
+	est_holdout_guard_no_targets_after_cut).
+
+## 5. Scenarios
+Scenario runs now route through an exog-capable model (SARIMAX with disruption/flood regressors); base vs
+disruption vs flood are reported per series (MT and %) in eport_extra.json. Series whose selected models
+are non-exog still receive the scenario via the added SARIMAX member; scenarios are no longer identical to
+base (validated by 	est_scenarios_differ_from_base). Note the estimated disruption/flood effect is small
+for the aggregate series.
+
+## 6. Forecast shape
+Trade ETS forecast is **not flat** (coefficient of variation 0.138) and preserves the seasonal pattern in
+months 7-12; training from 2025-01 gives a similar seasonal path (eport_extra.json: item6_shape).
+
+## 7. Top accounts
+Bottom-up Corporate (top-20 intermittent + residual) backtest **WAPE 0.291** vs direct Corporate total
+**0.378** -> **bottom-up selected**. Surfaced on the UI as a collapsible **"Corporate top accounts"** table
+(account, monthly point + band, last-12m actual); the planner template accepts account-level series_id.
+
+## 8. Tests
+orecasting/tests/ now has **12 tests**: existing 9 plus 	est_stage8.py (holdout guard; forecast
+reconciliation children=parents per month/scenario/quantile; scenario != base). All pass.
+
+## 9. Zero-shot
+Microsoft Visual C++ runtime present; **torch CPU wheel installed from https://download.pytorch.org/whl/cpu
+(2.14.1+cpu)**; **Chronos-Bolt (mazon/chronos-bolt-small) loads and forecasts successfully in a clean
+process** (verified: predict_quantiles returns (1,12) mean and (1,12,5) quantiles). However, **within the
+pipeline process the torch DLL fails (WinError 1114)** once numpy/pandas (and other native libs) load first -
+a Windows DLL-conflict. **Recommendation: run the zero-shot step in WSL** (works there), or in a dedicated
+process that imports torch before numpy. TimesFM and Moirai are not installed.

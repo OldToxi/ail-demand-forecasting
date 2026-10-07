@@ -69,6 +69,7 @@ def publish(upload_path: str | None = None) -> dict:
     payload = json.loads(ui.read_text(encoding="utf-8"))
     horizon_months = {f["month"] for s in payload["detail"].values() for f in s["forecasts"]["base"]}
     valid_series = set(payload["detail"]) | {s["series_id"] for s in payload["series"]}
+    valid_series |= {a["series_id"] for a in payload.get("accounts", [])}
 
     if not upload_path or not Path(upload_path).exists():
         (config.OUTPUTS_DIR / "ui" / "planner_adjustments.json").write_text(

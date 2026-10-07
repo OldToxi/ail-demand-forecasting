@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from . import backtest, config
+from . import backtest, config, external
 from .adapters import load_all
 from .series import build_series
 
@@ -60,10 +60,11 @@ def main():
 
         for sid, g in agg.groupby("series_id"):
             y = pd.Series(g.sort_values("month")["y"].values, index=pd.PeriodIndex(sorted(g["month"]), freq="M"))
+            exog_s = exog_full.join(external.intervention_frame(sid, cfg, exog_full.index))
             scale = backtest.seasonal_naive_mae(y, origins, horizon)
             for mc in models:
                 name = mc["name"]
-                rows, secs = backtest.backtest_series(y, name, mc.get("params", {}), exog_full, origins, horizon, cut)
+                rows, secs = backtest.backtest_series(y, name, mc.get("params", {}), exog_s, origins, horizon, cut)
                 timings[name] = round(timings.get(name, 0.0) + secs, 1)
                 if rows and "skipped" in rows[0]:
                     notes.append(f"{sid} {name}: {rows[0]['skipped']}")

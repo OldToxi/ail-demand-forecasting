@@ -88,6 +88,13 @@ def publish() -> dict:
         "series": series_meta,
         "detail": ui_series,
     }
+    acct_p = s4 / "accounts_top.json"
+    if acct_p.exists():
+        acct = json.loads(acct_p.read_text(encoding="utf-8"))
+        payload["accounts_summary"] = {k: acct.get(k) for k in
+                                       ["summary", "bottom_up_12m_total", "direct_12m_total",
+                                        "pct_difference", "n_top_accounts", "selection"]}
+        payload["accounts"] = acct.get("accounts", [])
     out = config.OUTPUTS_DIR / "ui"
     out.mkdir(parents=True, exist_ok=True)
     (out / "forecast_ui.json").write_text(json.dumps(payload, default=str), encoding="utf-8")

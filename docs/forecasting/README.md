@@ -150,3 +150,25 @@ planning-app/
                           onboarding_new_sbu.md, README.md (this file)
   data/outputs/forecast/  run_*/ backtest/ stage4/ ui/
 ```
+
+---
+
+## Revision for Checkpoint 2 (diagnostics + fixes)
+Corrected model leaderboard (mean overall WAPE): naive 0.377, ets 0.378, ma3 0.379, ma6 0.403,
+**structural 0.412** (was 0.99), lightgbm 0.440, theta 0.454, drift 0.502, seasonal_naive 0.516,
+**sarimax 0.528** (was 0.75), stl_ets 0.649. Fixes: STL seasonal-index alignment; structural switched to a
+stable local-level seasonal state-space (no slope extrapolation, no exog); SARIMAX restricted to a small exog
+set + clipping; per-series slump intervention dummies (zero in the forecast period); added a company
+intervention.
+
+External-variable tests redone strictly (best **exog-capable** model; >=3% pooled AND >=2/3 origins; all
+Intercompany dropped; remittance YoY tested): **4 keeps** - Corporate remittance_usd_mn_yoy (0.345->0.274),
+Trade|Dhaka remittance + LC (0.471->0.451/0.452), Trade|North East remittance (0.543->0.512).
+
+Sensitivity (DQ-30, no series cut): Trade 12m forecast +1.7% (2025 down-weighted) / +6.0% (2025 imputed).
+Backtest WAPE horizons 1-6 = 0.272 (holdout 0.222); **holdout never used for selection** (test-enforced).
+Scenarios now route through an exog model (SARIMAX) and differ from base. Trade ETS is not flat
+(CV 0.138). Top accounts: bottom-up selection (WAPE 0.291 vs 0.378) and a collapsible UI table; planner
+template supports account-level series_id. Tests: **12 pass** (added holdout-guard, reconciliation,
+scenario-separation). Zero-shot: torch CPU wheel + Chronos-Bolt run in a clean process; fails in-pipeline
+due to a Windows torch DLL conflict -> run in WSL. See  1_model_report.md (Checkpoint-2 revision).

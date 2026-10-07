@@ -44,13 +44,29 @@ class TimesFM(_ZeroShot):
 
 class ChronosBolt(_ZeroShot):
     name = "chronos_bolt"
+    _pipe = None
 
     def _load(self):
         try:
-            import chronos  # noqa: F401
+            import torch  # noqa: F401
+            from chronos import BaseChronosPipeline
         except Exception as e:  # pragma: no cover
             raise ModelUnavailable(f"chronos not installed: {e}")
-        raise ModelUnavailable("chronos installed but weights not cached")
+        if ChronosBolt._pipe is None:
+            try:
+                ChronosBolt._pipe = BaseChronosPipeline.from_pretrained("amazon/chronos-bolt-small", device_map="cpu")
+            except Exception as e:
+                raise ModelUnavailable(f"chronos weights unavailable: {e}")
+
+    def predict(self, horizon, X_future=None):
+        import torch
+        ctx = torch.tensor(np.asarray([self.y_.values], dtype=float))
+        q, mean = ChronosBolt._pipe.predict_quantiles(ctx, prediction_length=horizon,
+                                                      quantile_levels=[0.025, 0.1, 0.5, 0.9, 0.975])
+        q = np.asarray(q)[0]  # (horizon, 5)
+        point = np.maximum(np.asarray(mean)[0], 0.0)
+        quants = {"q025": q[:, 0], "q10": q[:, 1], "q50": q[:, 2], "q90": q[:, 3], "q975": q[:, 4]}
+        return Forecast(point, {k: np.maximum(v, 0.0) for k, v in quants.items()})
 
 
 class Moirai(_ZeroShot):

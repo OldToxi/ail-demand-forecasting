@@ -19,6 +19,14 @@ def _band(point, y):
     return normal_quantiles(point, residual_sigma(np.asarray(y, float), len(point)))
 
 
+def _clip(p, y):
+    """Guard against state-space explosions: finite, within [0, 3x train max]."""
+    p = np.asarray(p, float)
+    hi = max(3.0 * np.nanmax(y), 1.0)
+    p = np.where(np.isfinite(p), p, np.nanmean(y[-min(len(y), 6):]))
+    return np.clip(p, 0.0, hi)
+
+
 class AutoETS(BaseModel):
     name = "ets"; supports_exog = False; min_history_months = 24
 
@@ -60,6 +68,7 @@ class STLETS(BaseModel):
         from statsmodels.tsa.seasonal import STL
         from statsmodels.tsa.holtwinters import ExponentialSmoothing
         yv = self.y_.values
+        self.first_month_ = self.y_.index[0].month
         try:
             stl = STL(pd.Series(yv, index=pd.period_range("2000-01", periods=len(yv), freq="M")),
                       period=12, robust=True).fit()
@@ -76,7 +85,12 @@ class STLETS(BaseModel):
             p = np.repeat(yv[-1], horizon)
         else:
             sa_fc = np.asarray(self.ets_.forecast(horizon), float)
-            seas = np.array([self.seasonal_[(len(yv) + i) % 12] for i in range(horizon)]) if self.seasonal_ is not None else 0.0
+            if self.seasonal_ is not None:
+                last = self.y_.index[-1]
+                seas = np.array([self.seasonal_[(last + i).month - self.first_month_] % 12
+                                 for i in range(1, horizon + 1)])
+            else:
+                seas = 0.0
             p = np.maximum(sa_fc + seas, 0.0)
         return Forecast(p, _band(p, self.y_.values))
 
@@ -103,17 +117,51 @@ class Theta(BaseModel):
 
 class SARIMAX(BaseModel):
     name = "sarimax"; supports_exog = True; min_history_months = 24
+    EXOG = ["eid_closure_days_total", "working_days_6day", "fy_end_flag", "monsoon_flag",
+            "dry_season_flag", "slump", "disruption_days_full", "flood_major_flag"]
 
     def fit(self, y, X=None):
         super().fit(y, X)
         from statsmodels.tsa.statespace.sarimax import SARIMAX as SM
+        Xs = self._small(X)
         Xv = None
-        if X is not None and X.shape[1]:
-            self.mu_ = X.mean(); self.sd_ = X.std().replace(0, 1)
-            Xv = ((X - self.mu_) / self.sd_).values
+        if Xs is not None and Xs.shape[1]:
+            self.mu_ = Xs.mean(); self.sd_ = Xs.std().replace(0, 1)
+            Xv = ((Xs - self.mu_) / self.sd_).values
         try:
             self.m_ = SM(self.y_.values, exog=Xv, order=(1, 1, 1), seasonal_order=(0, 1, 1, 12),
-                         enforce_stationarity=True, enforce_invertibility=True).fit(disp=False, maxiter=200)
+                         enforce_stationarity=True, enforce_invertibility=True).fit(disp=False, maxiter=100)
+        except Exception:
+            self.m_ = None
+        return self
+
+    def _small(self, X):
+        if X is None:
+            return None
+        cols = [c for c in self.EXOG if c in X.columns]
+        return X[cols] if cols else X
+
+    def predict(self, horizon, X_future=None):
+        if self.m_ is None:
+            p = np.repeat(self.y_.values[-1], horizon)
+        else:
+            Xf = None
+            if X_future is not None and hasattr(self, "mu_"):
+                Xf = ((self._small(X_future) - self.mu_) / self.sd_).values
+            p = np.asarray(self.m_.forecast(horizon, exog=Xf), float)
+            p = _clip(p, self.y_.values)
+        return Forecast(p, _band(p, self.y_.values))
+
+
+class Structural(BaseModel):
+    name = "structural"; supports_exog = False; min_history_months = 24
+
+    def fit(self, y, X=None):
+        super().fit(y, X)
+        from statsmodels.tsa.statespace.structural import UnobservedComponents as UC
+        # stable seasonal state-space (local level + monthly seasonality); exog omitted to avoid instability
+        try:
+            self.m_ = UC(self.y_.values, level="local level", seasonal=12).fit(disp=False, maxiter=200)
         except Exception:
             self.m_ = None
         return self
@@ -122,40 +170,6 @@ class SARIMAX(BaseModel):
         if self.m_ is None:
             p = np.repeat(self.y_.values[-1], horizon)
         else:
-            Xf = None
-            if X_future is not None and hasattr(self, "mu_"):
-                Xf = ((X_future - self.mu_) / self.sd_).values
-            p = np.asarray(self.m_.forecast(horizon, exog=Xf), float)
-            p = np.maximum(np.where(np.isfinite(p), p, self.y_.values[-1]), 0.0)
-        return Forecast(p, _band(p, self.y_.values))
-
-
-class Structural(BaseModel):
-    name = "structural"; supports_exog = True; min_history_months = 24
-
-    def fit(self, y, X=None):
-        super().fit(y, X)
-        from statsmodels.tsa.statespace.structural import UnobservedComponents as UC
-        Xv = None
-        if X is not None and X.shape[1]:
-            self.mu_ = X.mean(); self.sd_ = X.std().replace(0, 1)
-            Xv = ((X - self.mu_) / self.sd_).values
-        try:
-            self.m_ = UC(self.y_.values, level="local linear trend", seasonal=12, exog=Xv).fit(disp=False, maxiter=300)
-        except Exception:
-            try:
-                self.m_ = UC(self.y_.values, level="local level", seasonal=12, exog=Xv).fit(disp=False, maxiter=300)
-            except Exception:
-                self.m_ = None
-        return self
-
-    def predict(self, horizon, X_future=None):
-        if self.m_ is None:
-            p = np.repeat(self.y_.values[-1], horizon)
-        else:
-            Xf = None
-            if X_future is not None and hasattr(self, "mu_"):
-                Xf = ((X_future - self.mu_) / self.sd_).values
-            p = np.asarray(self.m_.forecast(horizon, exog=Xf), float)
-            p = np.maximum(np.where(np.isfinite(p), p, self.y_.values[-1]), 0.0)
+            p = np.asarray(self.m_.forecast(horizon), float)
+            p = _clip(p, self.y_.values)
         return Forecast(p, _band(p, self.y_.values))

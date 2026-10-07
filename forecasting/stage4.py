@@ -75,35 +75,13 @@ def run():
                 print(f"[backtest] {sid} done")
             metrics = pd.DataFrame(all_metrics)
 
-        # ---------- 4.4 external-variable screening (LightGBM, one variable at a time) ----------
-        print("[external-tests] screening", SCREEN_VARS)
-        for sid, g in agg.groupby("series_id"):
-            y = pd.Series(g.sort_values("month")["y"].values, index=pd.PeriodIndex(sorted(g["month"]), freq="M"))
-            scale = backtest.seasonal_naive_mae(y, origins, H)
-            base_rows, _ = backtest.backtest_series(y, "lightgbm", {}, base_exog, origins, H, cut)
-            if not base_rows or "skipped" in base_rows[0]:
-                continue
-            base_sum = backtest.summarize(base_rows, scale)
-            for var in SCREEN_VARS:
-                entry = next((v for v in ext_reg["variables"] if v["feature_key"] == var), None)
-                if entry is None:
-                    continue
-                if entry.get("channels") and g["series_id"].iloc[0].split("|")[-1] not in entry["channels"]:
-                    continue  # e.g. ADP Corporate-only
-                vcol = _var_column(ext_monthly, var, entry["type"], entry.get("lag", 0), exog_idx)
-                if vcol is None:
-                    continue
-                vx = _exog(base_exog, vcol)
-                vrows, _ = backtest.backtest_series(y, "lightgbm", {}, vx, origins, H, cut)
-                if not vrows or "skipped" in vrows[0]:
-                    continue
-                vsum = backtest.summarize(vrows, scale)
-                decision, rel = _decide(base_sum, vsum)
-                ext_tests.append({"sbu": sbu_id, "series_id": sid, "feature_key": var, "model": "lightgbm",
-                                  "base_wape": {b: base_sum[b]["wape"] for b in ["short", "medium", "long"] if b in base_sum},
-                                  "with_wape": {b: vsum[b]["wape"] for b in ["short", "medium", "long"] if b in vsum},
-                                  "decision": decision, "relative_change": rel})
-                print(f"[external-tests] {sid:28s} {var:28s} -> {decision}")
+        # ---------- 4.4 external-variable screening (strict: best base model, >=3% & >=2/3 origins) ----------
+        from . import report_extra as _RE
+        print("[external-tests] strict screening (best base model, remittance YoY, drop Intercompany)")
+        ext_tests = _RE.item2_best_model_tests(cfg, ext_monthly, base_exog, series, origins, cut)
+        for t in ext_tests:
+            print(f"[external-tests] {t['series_id']:28s} {t['feature_key']:28s} ({t['model']}) "
+                  f"base={t['base_wape']} with={t['with_wape']} -> {t['decision']}")
 
         # ---------- 4.5 selection per series x bucket (top-k + fallback) ----------
         selection = _select(metrics, k=3)
@@ -317,15 +295,19 @@ def _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg, fut
                 models += sel[b]["selected_models"]
         models = list(dict.fromkeys(models))[:3] or ["seasonal_naive"]
         best = sel.get("short", {}).get("best_model", models[0])
-        offs, cov = _conformal(y, best, base_exog, origins, H, cut)
+        exog_s = train_exog.join(external.intervention_frame(sid, cfg, train_exog.index))
+        offs, cov = _conformal(y, best, exog_s, origins, H, cut)
         coverage[sid] = cov
         for scenario in ["base", "disruption", "flood"]:
-            fx = _scenario_future_exog(train_exog, scenario, fut_idx, cfg)
+            fx = _scenario_future_exog(exog_s, scenario, fut_idx, cfg)
+            scen_models = list(models)
+            if scenario != "base" and not any(build_model(mm, {}).supports_exog for mm in models):
+                scen_models = list(dict.fromkeys(models[:2] + ["sarimax"]))  # route scenarios through an exog model
             pts = []
-            for name in models:
+            for name in scen_models:
                 try:
                     m = build_model(name, {}); sup = m.supports_exog
-                    m.fit(y, train_exog.reindex(y.index) if sup else None)
+                    m.fit(y, exog_s.reindex(y.index) if sup else None)
                     fc = m.predict(H, fx if sup else None)
                     pts.append(fc.point)
                 except Exception:
@@ -336,7 +318,7 @@ def _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg, fut
             for i, per in enumerate(fut_idx):
                 o = offs.get(bucket_of(i + 1)) or {0.025: 0.0, 0.10: 0.0, 0.90: 0.0, 0.975: 0.0}
                 rows.append({"sbu": "AIL", "series_id": sid, "month": str(per), "horizon": i + 1,
-                             "scenario": scenario, "model": ",".join(models),
+                             "scenario": scenario, "model": ",".join(scen_models),
                              "point_forecast_mt": round(float(point[i]), 1),
                              "q025": round(float(point[i] + o[0.025]), 1),
                              "q10": round(float(point[i] + o[0.10]), 1),
@@ -344,7 +326,28 @@ def _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg, fut
                              "q90": round(float(point[i] + o[0.90]), 1),
                              "q975": round(float(point[i] + o[0.975]), 1),
                              "is_final_selection": True})
-    return pd.DataFrame(rows), coverage
+    df = pd.DataFrame(rows)
+    return _reconcile_forecasts(df), coverage
+
+
+def _reconcile_forecasts(df: pd.DataFrame) -> pd.DataFrame:
+    """Make every quantile consistent: Trade=sum(zones), external=Corporate+Trade, company=external+Intercompany."""
+    qcols = ["point_forecast_mt", "q025", "q10", "q50", "q90", "q975"]
+    zones = ["AIL|zone|Trade|Dhaka", "AIL|zone|Trade|North", "AIL|zone|Trade|North East", "AIL|zone|Trade|South"]
+    for sc in df["scenario"].unique():
+        for q in qcols:
+            piv = df[df.scenario == sc].pivot_table(index="month", columns="series_id", values=q, aggfunc="sum")
+            z = [c for c in zones if c in piv.columns]
+            if z and "AIL|channel|Trade" in piv.columns:
+                piv["AIL|channel|Trade"] = piv[z].sum(axis=1)
+            if {"AIL|channel|Corporate", "AIL|channel|Trade"} <= set(piv.columns):
+                piv["AIL|sbu|external"] = piv["AIL|channel|Corporate"] + piv["AIL|channel|Trade"]
+            if {"AIL|sbu|external", "AIL|channel|Intercompany"} <= set(piv.columns):
+                piv["AIL|company"] = piv["AIL|sbu|external"] + piv["AIL|channel|Intercompany"]
+            for sid in piv.columns:
+                for m in piv.index:
+                    df.loc[(df.scenario == sc) & (df.series_id == sid) & (df.month == m), q] = round(float(piv.loc[m, sid]), 1)
+    return df
 
 
 def _top_accounts(series, base_exog, origins, H, cut, fut_idx, cfg):
@@ -376,12 +379,24 @@ def _top_accounts(series, base_exog, origins, H, cut, fut_idx, cfg):
     bottom_up = top_sum + resid_fc
     yco = pd.Series(co_total.values, index=pd.PeriodIndex(co_total.index, freq="M"))
     mdir = build_model("ets", {}); mdir.fit(yco); direct = mdir.predict(H).point
+    # per-account monthly forecasts (point + residual-sigma band) + last-12 actuals, for the UI table
+    fut = list(pd.period_range(co_total.index.max() + 1, periods=H, freq="M"))
+    acc_rows = []
+    for sid in top:
+        y = pd.Series(piv[sid].values, index=pd.PeriodIndex(piv.index, freq="M"))
+        pt = fc[sid]
+        sd = float(np.nanstd(np.diff(y.values[-12:]))) if len(y) >= 13 else float(np.nanstd(y.values) or 1.0)
+        last12 = [{"month": str(m), "actual_mt": round(float(y.loc[m]), 1)} for m in y.index[-12:]]
+        fcm = [{"month": str(m), "point": round(float(pt[i]), 1),
+                "q10": round(float(pt[i] - 1.2816 * sd * (i + 1) ** 0.5), 1),
+                "q90": round(float(pt[i] + 1.2816 * sd * (i + 1) ** 0.5), 1)} for i, m in enumerate(fut)]
+        acc_rows.append({"account": sid.split("|")[-1], "series_id": sid, "last12": last12, "forecast": fcm})
     return {"summary": f"top-{top_n} accounts + residual vs direct Corporate",
             "top_accounts": top[:10],
             "bottom_up_12m_total": round(float(np.sum(bottom_up)), 1),
             "direct_12m_total": round(float(np.sum(direct)), 1),
             "pct_difference": round(float((np.sum(bottom_up) - np.sum(direct)) / max(np.sum(direct), 1) * 100), 1),
-            "n_top_accounts": len(top)}
+            "n_top_accounts": len(top), "accounts": acc_rows}
 
 
 
