@@ -33,6 +33,7 @@ def run():
     cfg = config.load_config(); reg = config.load_sbus(); ext_reg = config.load_external_registry()
     models_cfg = config._load("models.yaml")["models"]
     ext_monthly = external.load_monthly(config.resolve(ext_reg["monthly_file"]))
+    ext_monthly = external.augment_with_files(ext_monthly, ext_reg, config.REPO_ROOT)
     exog_idx = ext_monthly.index
     cal_cols = [v["feature_key"] for v in ext_reg["variables"]
                 if v["type"] == "known_in_advance" and v.get("transform") != "annual_level"]
@@ -124,9 +125,16 @@ def run():
         sens = _sensitivity(agg, base_exog, origins, H, cut)
         print("[sensitivity-2025]", sens)
 
-        # ---------- 4.10 final forecast + scenarios ----------
-        forecasts = _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg, fut_idx, H, calib)
-        print("[final-forecast] rows:", len(forecasts))
+        # ---------- 4.10 final forecast + exog scenarios (conformal intervals) ----------
+        forecasts, coverage = _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg,
+                                              fut_idx, H, calib, origins, cut, cfg)
+        calib.update(coverage)
+        print("[final-forecast] rows:", len(forecasts),
+              "| coverage95 by series:", {k: v.get("long", {}).get("cov95") for k, v in coverage.items()})
+
+        # ---------- 4.10b Corporate top-accounts layer ----------
+        accounts = _top_accounts(series, base_exog, origins, H, cut, fut_idx, cfg)
+        print("[top-accounts]", accounts.get("summary"), accounts.get("pct_difference"))
 
         # ---------- 4.11 final holdout (once) ----------
         holdout = _holdout(agg, selection, base_exog, cfg, H)
@@ -142,6 +150,7 @@ def run():
         (d / "forecasts.json").write_text(forecasts.to_json(orient="records"), encoding="utf-8")
         (d / "holdout.json").write_text(json.dumps(holdout, indent=2, default=str), encoding="utf-8")
         (d / "intervals.json").write_text(json.dumps(calib, indent=2, default=str), encoding="utf-8")
+        (d / "accounts_top.json").write_text(json.dumps(accounts, indent=2, default=str), encoding="utf-8")
         (d / "reconciliation.json").write_text(json.dumps(recon, indent=2, default=str), encoding="utf-8")
         (d / "sensitivity_2025.json").write_text(json.dumps(sens, indent=2, default=str), encoding="utf-8")
         (d / "break_eid_variants.json").write_text(json.dumps(break_eid, indent=2, default=str), encoding="utf-8")
@@ -251,8 +260,54 @@ def _sensitivity(agg, base_exog, origins, H, cut):
             "note": "drops 2025-01..2025-11 (DQ-30 regime) to test sensitivity"}
 
 
-def _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg, fut_idx, H, calib):
-    rows = []
+def _scenario_future_exog(train_exog, scenario, fut_idx, cfg):
+    x = train_exog.reindex(fut_idx).copy().fillna(0.0)
+    if scenario == "disruption" and "disruption_days_full" in x.columns:
+        x["disruption_days_full"] = 0.0
+        spec = cfg.get("scenarios", {}).get("disruption", {})
+        for m in spec.get("months", []):
+            if m in x.index:
+                x.loc[m, "disruption_days_full"] = spec.get("full_days", 5)
+    elif scenario == "flood" and "flood_major_flag" in x.columns:
+        x["flood_major_flag"] = 0.0
+        m = cfg.get("scenarios", {}).get("flood", {}).get("month")
+        if m and m in x.index:
+            x.loc[m, "flood_major_flag"] = 1.0
+    return x
+
+
+def _conformal(y, model_name, base_exog, origins, H, cut):
+    """Conformal offsets per bucket from the model's backtest residuals; measured coverage."""
+    buckets = {"short": (1, 3), "medium": (4, 6), "long": (7, 12)}
+    rows, _ = backtest.backtest_series(y, model_name, {}, base_exog, origins, H, cut)
+    if not rows or "skipped" in rows[0]:
+        return {}, {}
+    df = pd.DataFrame(rows)
+    offs, cov = {}, {}
+    for b, (a, c) in buckets.items():
+        d = df[(df.horizon >= a) & (df.horizon <= c)]
+        if len(d) == 0:
+            continue
+        err = (d.pred - d.actual).values
+        err = err[np.isfinite(err)]
+        if len(err) < 5:
+            continue
+        q = {a: float(np.quantile(err, a)) for a in (0.025, 0.10, 0.50, 0.90, 0.975)}
+        # actual-space conformal offsets: actual = pred - err  ->  offset = -quantile(err)
+        offs[b] = {0.025: -q[0.975], 0.10: -q[0.90], 0.50: -q[0.50], 0.90: -q[0.10], 0.975: -q[0.025]}
+        lo = d.pred + offs[b][0.025]; hi = d.pred + offs[b][0.975]
+        lo80 = d.pred + offs[b][0.10]; hi80 = d.pred + offs[b][0.90]
+        cov[b] = {"cov80": round(float(((d.actual >= lo80) & (d.actual <= hi80)).mean()), 3),
+                  "cov95": round(float(((d.actual >= lo) & (d.actual <= hi)).mean()), 3), "n": int(len(d))}
+    return offs, cov
+
+
+def _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg, fut_idx, H, calib, origins, cut, cfg):
+    from .backtest import bucket_of
+    extra = [c for c in ["disruption_days_full", "disruption_days_partial", "flood_major_flag"]
+             if c in ext_monthly.columns]
+    train_exog = base_exog.join(ext_monthly[extra].reindex(base_exog.index).fillna(0.0)) if extra else base_exog
+    rows = []; coverage = {}
     for sid, g in agg.groupby("series_id"):
         y = pd.Series(g.sort_values("month")["y"].values, index=pd.PeriodIndex(sorted(g["month"]), freq="M"))
         sel = selection.get(sid, {})
@@ -260,36 +315,74 @@ def _final_forecast(series, agg, selection, base_exog, ext_monthly, ext_reg, fut
         for b in ["short", "medium", "long"]:
             if b in sel:
                 models += sel[b]["selected_models"]
-        models = list(dict.fromkeys(models)) or ["seasonal_naive"]
-        pts, qs = [], {q: [] for q in ["q025", "q10", "q50", "q90", "q975"]}
-        for name in models[:3]:
+        models = list(dict.fromkeys(models))[:3] or ["seasonal_naive"]
+        best = sel.get("short", {}).get("best_model", models[0])
+        offs, cov = _conformal(y, best, base_exog, origins, H, cut)
+        coverage[sid] = cov
+        for scenario in ["base", "disruption", "flood"]:
+            fx = _scenario_future_exog(train_exog, scenario, fut_idx, cfg)
+            pts = []
+            for name in models:
+                try:
+                    m = build_model(name, {}); sup = m.supports_exog
+                    m.fit(y, train_exog.reindex(y.index) if sup else None)
+                    fc = m.predict(H, fx if sup else None)
+                    pts.append(fc.point)
+                except Exception:
+                    continue
+            if not pts:
+                pts = [np.repeat(y.values[-1], H)]
+            point = np.mean(pts, axis=0)
+            for i, per in enumerate(fut_idx):
+                o = offs.get(bucket_of(i + 1)) or {0.025: 0.0, 0.10: 0.0, 0.90: 0.0, 0.975: 0.0}
+                rows.append({"sbu": "AIL", "series_id": sid, "month": str(per), "horizon": i + 1,
+                             "scenario": scenario, "model": ",".join(models),
+                             "point_forecast_mt": round(float(point[i]), 1),
+                             "q025": round(float(point[i] + o[0.025]), 1),
+                             "q10": round(float(point[i] + o[0.10]), 1),
+                             "q50": round(float(point[i]), 1),
+                             "q90": round(float(point[i] + o[0.90]), 1),
+                             "q975": round(float(point[i] + o[0.975]), 1),
+                             "is_final_selection": True})
+    return pd.DataFrame(rows), coverage
+
+
+def _top_accounts(series, base_exog, origins, H, cut, fut_idx, cfg):
+    """Corporate top-accounts layer: intermittent models + residual, vs direct Corporate total."""
+    acc = series[series.level == "account"]
+    if acc.empty:
+        return {"summary": "no account-level series"}
+    reg = config.load_sbus()
+    top_n = next((s.get("top_accounts", {}).get("n", 20) for s in reg["sbus"] if s.get("top_accounts")), 20)
+    tot = acc.groupby("series_id")["y"].sum().sort_values(ascending=False)
+    top = tot.head(top_n).index.tolist()
+    piv = acc.pivot_table(index="month", columns="series_id", values="y", aggfunc="sum").fillna(0.0)
+    co = series[(series.level == "channel") & (series.series_id.str.contains("Corporate"))]
+    co_total = co.groupby("month")["y"].sum().sort_index()
+    fc = {}
+    for sid in top:
+        y = pd.Series(piv[sid].values, index=pd.PeriodIndex(piv.index, freq="M"))
+        pts = []
+        for mn in ["croston_sba", "tsb", "hurdle"]:
             try:
-                m = build_model(name, {}); 
-                sup = m.supports_exog
-                m.fit(y, base_exog.reindex(y.index) if sup else None)
-                fc = m.predict(H, base_exog.reindex(fut_idx) if sup else None)
-                pts.append(fc.point)
-                for q in qs:
-                    qs[q].append(fc.quantiles.get(q, fc.point))
+                m = build_model(mn, {}); m.fit(y); pts.append(m.predict(H).point)
             except Exception:
                 continue
-        if not pts:
-            pts = [np.repeat(y.values[-1], H)]
-        point = np.mean(pts, axis=0)
-        qmean = {q: np.mean(v, axis=0) if v else point for q, v in qs.items()}
-        for scenario in ["base", "disruption", "flood"]:
-            scale = {"base": 1.0, "disruption": 0.93, "flood": 0.96}[scenario]  # placeholder scenario multipliers
-            for i, per in enumerate(fut_idx):
-                rows.append({"sbu": "AIL", "series_id": sid, "month": str(per), "horizon": i + 1,
-                             "scenario": scenario, "model": ",".join(models[:3]),
-                             "point_forecast_mt": round(float(point[i] * scale), 1),
-                             "q025": round(float(qmean["q025"][i] * scale), 1),
-                             "q10": round(float(qmean["q10"][i] * scale), 1),
-                             "q50": round(float(qmean["q50"][i] * scale), 1),
-                             "q90": round(float(qmean["q90"][i] * scale), 1),
-                             "q975": round(float(qmean["q975"][i] * scale), 1),
-                             "is_final_selection": True})
-    return pd.DataFrame(rows)
+        fc[sid] = np.mean(pts, axis=0) if pts else np.repeat(y.values[-1], H)
+    top_sum = np.sum(list(fc.values()), axis=0) if fc else np.zeros(H)
+    resid = co_total - piv[top].sum(axis=1)
+    yres = pd.Series(resid.values, index=pd.PeriodIndex(resid.index, freq="M"))
+    mres = build_model("ets", {}); mres.fit(yres); resid_fc = mres.predict(H).point
+    bottom_up = top_sum + resid_fc
+    yco = pd.Series(co_total.values, index=pd.PeriodIndex(co_total.index, freq="M"))
+    mdir = build_model("ets", {}); mdir.fit(yco); direct = mdir.predict(H).point
+    return {"summary": f"top-{top_n} accounts + residual vs direct Corporate",
+            "top_accounts": top[:10],
+            "bottom_up_12m_total": round(float(np.sum(bottom_up)), 1),
+            "direct_12m_total": round(float(np.sum(direct)), 1),
+            "pct_difference": round(float((np.sum(bottom_up) - np.sum(direct)) / max(np.sum(direct), 1) * 100), 1),
+            "n_top_accounts": len(top)}
+
 
 
 def _holdout(agg, selection, base_exog, cfg, H):

@@ -100,3 +100,25 @@ def last_available_month(var: dict, origin: pd.Period) -> pd.Period | None:
     if var["type"] == LEADING:
         return origin - var.get("lag", 1)
     return None                          # not a base feature
+
+
+def augment_with_files(monthly: pd.DataFrame, registry: dict, repo_root) -> pd.DataFrame:
+    """Merge any external variable stored in its own file (e.g. rainfall) into the monthly frame."""
+    from pathlib import Path
+    out = monthly.copy()
+    for v in registry["variables"]:
+        f = v.get("file")
+        if not f:
+            continue
+        p = Path(f) if Path(f).is_absolute() else (repo_root / f)
+        if not p.exists() or v["column"] in out.columns:
+            continue
+        try:
+            aux = pd.read_csv(p)
+            aux["month"] = pd.PeriodIndex(aux["month"], freq="M")
+            aux = aux.set_index("month")[v["column"]]
+            out[v["column"]] = aux.reindex(out.index)
+        except Exception:
+            continue
+    return out
+

@@ -24,3 +24,8 @@ interventions:
 # performance budget (seconds) per model on CPU; skip gracefully if exceeded
 model_time_budget_seconds: 240
 run_time_budget_seconds: 1800
+
+# scenarios (applied to exog-capable models on the final forecast; not used for selection)
+scenarios:
+  disruption: {months: ["2027-01", "2027-02"], full_days: 5}
+  flood: {month: "2027-05"}
