@@ -20,11 +20,28 @@ def _band(point, y):
 
 
 def _clip(p, y):
-    """Guard against state-space explosions: finite, within [0, 3x train max]."""
+    """Guard against state-space explosions: finite, within [0, 3x train max]. Logs every activation."""
     p = np.asarray(p, float)
     hi = max(3.0 * np.nanmax(y), 1.0)
-    p = np.where(np.isfinite(p), p, np.nanmean(y[-min(len(y), 6):]))
-    return np.clip(p, 0.0, hi)
+    fallback = np.nanmean(y[-min(len(y), 6):])
+    out = np.where(np.isfinite(p), p, fallback)
+    out = np.clip(out, 0.0, hi)
+    n = int(np.sum((out != p) | ~np.isfinite(p)))
+    if n:
+        CLIP_LOG.append({"context": dict(CLIP_CONTEXT), "n_clipped": n,
+                         "raw_max": float(np.nanmax(p)) if np.isfinite(p).any() else None,
+                         "raw_min": float(np.nanmin(p)) if np.isfinite(p).any() else None,
+                         "clipped_max": float(np.nanmax(out)), "bound_hi": float(hi)})
+    return out
+
+
+# clipping audit log (populated by _clip; context set by backtest/stage4 loops)
+CLIP_LOG: list = []
+CLIP_CONTEXT: dict = {}
+
+
+def reset_clip_log():
+    CLIP_LOG.clear()
 
 
 class AutoETS(BaseModel):

@@ -38,9 +38,10 @@ def build_exog(ext_monthly, registry, segment, index: pd.PeriodIndex, cols: list
 
 
 def backtest_series(y: pd.Series, model_name: str, model_params: dict, exog_full: pd.DataFrame,
-                    origins: list[pd.Period], horizon: int, cut: pd.Period) -> tuple[list[dict], float]:
+                    origins: list[pd.Period], horizon: int, cut: pd.Period,
+                    series_id: str | None = None) -> tuple[list[dict], float]:
     """Return (error rows, seconds). One row per origin x horizon actually evaluated."""
-    from .models import build_model
+    from .models import build_model, statistical
     from .models.zeroshot import ModelUnavailable
     rows = []
     t0 = time.time()
@@ -59,6 +60,7 @@ def backtest_series(y: pd.Series, model_name: str, model_params: dict, exog_full
         Xfu = exog_full.reindex(targets) if supports_exog else None
         try:
             m = build_model(model_name, model_params)      # fresh, unfitted each origin
+            statistical.CLIP_CONTEXT = {"series": series_id, "model": model_name, "origin": str(T)}
             m.fit(train, Xtr)
             fc = m.predict(horizon, Xfu)
         except ModelUnavailable:

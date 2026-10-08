@@ -1,48 +1,61 @@
-# External-data registry. Primary source of truth = anwar_group_external_variables.csv (catalog);
-# this file supplies the column-level details (lag, future-value type, transform) keyed by feature_key.
-# The loader cross-checks against the catalog when present and warns if a key is missing.
+# External-data registry. Column-level details keyed by feature_key; catalog_var_id links to the
+# group catalog (anwar_group_external_variables.csv). The catalog is the primary source of relevance by
+# segment; this file supplies lag/transform/segment and the var_id linkage. Validate with
+# forecasting/validate_registry.py.
 catalog_file: Data/AIL/ail_external/anwar_group_external_variables.csv
 monthly_file: Data/AIL/ail_external/ail_external_monthly.csv
 segments_all: ALL
 
 variables:
   # ---- calendar / known in advance (all SBUs) ----
-  - {feature_key: eid_fitr_closure_days,  column: eid_fitr_closure_days,  lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: eid_adha_closure_days,  column: eid_adha_closure_days,  lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: eid_closure_days_total, column: eid_closure_days_total, lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: eid_closure_days_last10,column: eid_closure_days_last10,lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: eid_month_flag,         column: eid_month_flag,         lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: ramadan_days,           column: ramadan_days,           lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: public_holiday_weekdays,column: public_holiday_weekdays,lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: working_days_6day,      column: working_days_6day,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: working_days_5day,      column: working_days_5day,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: fy_end_flag,            column: fy_end_flag,            lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: monsoon_flag,           column: monsoon_flag,           lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: dry_season_flag,        column: dry_season_flag,        lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: boro_harvest_flag,      column: boro_harvest_flag,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: aman_harvest_flag,      column: aman_harvest_flag,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: election_month_flag,    column: election_month_flag,    lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: election_window_flag,   column: election_window_flag,   lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true}
+  - {feature_key: eid_fitr_closure_days,  column: eid_fitr_closure_days,  lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-01}
+  - {feature_key: eid_adha_closure_days,  column: eid_adha_closure_days,  lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-02}
+  - {feature_key: eid_closure_days_total, column: eid_closure_days_total, lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-01/CAL-02}
+  - {feature_key: eid_closure_days_last10,column: eid_closure_days_last10,lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-01/CAL-02}
+  - {feature_key: eid_month_flag,         column: eid_month_flag,         lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-01/CAL-02}
+  - {feature_key: ramadan_days,           column: ramadan_days,           lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-03}
+  - {feature_key: public_holiday_weekdays,column: public_holiday_weekdays,lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-04}
+  - {feature_key: working_days_6day,      column: working_days_6day,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-04}
+  - {feature_key: working_days_5day,      column: working_days_5day,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-04}
+  - {feature_key: fy_end_flag,            column: fy_end_flag,            lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: CAL-05}
+  - {feature_key: monsoon_flag,           column: monsoon_flag,           lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: "none (derived seasonality)"}
+  - {feature_key: dry_season_flag,        column: dry_season_flag,        lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: "none (derived seasonality)"}
+  - {feature_key: boro_harvest_flag,      column: boro_harvest_flag,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: AGR-01}
+  - {feature_key: aman_harvest_flag,      column: aman_harvest_flag,      lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: AGR-01}
+  - {feature_key: election_month_flag,    column: election_month_flag,    lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: EVT-02}
+  - {feature_key: election_window_flag,   column: election_window_flag,   lag: 0, type: known_in_advance, transform: none, segments: [ALL], enabled: true,  catalog_var_id: EVT-02}
   # ---- caveat flags (carried, not model inputs) ----
-  - {feature_key: calendar_provisional_flag, column: calendar_provisional_flag, lag: 0, type: check_only, transform: none, segments: [ALL], enabled: true}
-  - {feature_key: lc_interpolated_flag,      column: lc_interpolated_flag,      lag: 0, type: check_only, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: calendar_provisional_flag, column: calendar_provisional_flag, lag: 0, type: check_only, transform: none, segments: [ALL], enabled: true,  catalog_var_id: "none (data-quality flag)"}
+  - {feature_key: lc_interpolated_flag,      column: lc_interpolated_flag,      lag: 0, type: check_only, transform: none, segments: [STEEL], enabled: true,  catalog_var_id: TRD-02}
   # ---- intervention / constraint (scenario or flag) ----
-  - {feature_key: disruption_days_full,    column: disruption_days_full,    lag: 0, type: scenario_only,   transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: disruption_days_partial, column: disruption_days_partial, lag: 0, type: scenario_only,   transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: flood_event_flag,        column: flood_event_flag,        lag: 0, type: constraint_flag, transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: flood_major_flag,        column: flood_major_flag,        lag: 0, type: constraint_flag, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: disruption_days_full,    column: disruption_days_full,    lag: 0, type: scenario_only,   transform: none, segments: [STEEL], enabled: true, catalog_var_id: EVT-01}
+  - {feature_key: disruption_days_partial, column: disruption_days_partial, lag: 0, type: scenario_only,   transform: none, segments: [STEEL], enabled: true, catalog_var_id: EVT-01}
+  - {feature_key: flood_event_flag,        column: flood_event_flag,        lag: 0, type: constraint_flag, transform: none, segments: [STEEL], enabled: true, catalog_var_id: WTH-02}
+  - {feature_key: flood_major_flag,        column: flood_major_flag,        lag: 0, type: constraint_flag, transform: none, segments: [STEEL], enabled: true, catalog_var_id: WTH-02}
+  - {feature_key: slump,                   column: slump,                   lag: 0, type: scenario_only,   transform: none, segments: [STEEL], enabled: false, catalog_var_id: EVT-03}
   # ---- budget / tax (known until next budget) ----
-  - {feature_key: rod_vat_tk_per_t,        column: rod_vat_tk_per_t,        lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: scrap_import_tax_tk_per_t, column: scrap_import_tax_tk_per_t, lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: steel_budget_change_flag, column: steel_budget_change_flag, lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: rod_vat_tk_per_t,        column: rod_vat_tk_per_t,        lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true, catalog_var_id: POL-01}
+  - {feature_key: scrap_import_tax_tk_per_t, column: scrap_import_tax_tk_per_t, lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true, catalog_var_id: POL-01}
+  - {feature_key: steel_budget_change_flag, column: steel_budget_change_flag, lag: 0, type: known_in_advance, transform: none, segments: [STEEL], enabled: true, catalog_var_id: POL-01}
   # ---- leading indicators (publication lag; lagged features only) ----
-  - {feature_key: remittance_usd_mn,            column: remittance_usd_mn,            lag: 2, type: leading, transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: lc_open_raw_materials_usd_mn, column: lc_open_raw_materials_usd_mn, lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: lc_open_capital_machinery_usd_mn, column: lc_open_capital_machinery_usd_mn, lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: usd_bdt_avg,                  column: usd_bdt_avg,                  lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
-  - {feature_key: cpi_inflation_p2p_pct,        column: cpi_inflation_p2p_pct,        lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true}
+  - {feature_key: remittance_usd_mn,            column: remittance_usd_mn,            lag: 2, type: leading, transform: none, segments: [STEEL], enabled: true, catalog_var_id: FIN-01}
+  - {feature_key: lc_open_raw_materials_usd_mn, column: lc_open_raw_materials_usd_mn, lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true, catalog_var_id: TRD-02}
+  - {feature_key: lc_open_capital_machinery_usd_mn, column: lc_open_capital_machinery_usd_mn, lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true, catalog_var_id: TRD-03}
+  - {feature_key: usd_bdt_avg,                  column: usd_bdt_avg,                  lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true, catalog_var_id: TRD-01}
+  - {feature_key: cpi_inflation_p2p_pct,        column: cpi_inflation_p2p_pct,        lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true, catalog_var_id: MAC-01}
   # ---- ADP (annual level; Corporate only) ----
-  - {feature_key: adp_fy_revised_tk_cr,   column: adp_fy_revised_tk_cr,   lag: 0, type: known_in_advance, transform: annual_level, segments: [STEEL], enabled: true, channels: [Corporate]}
-  - {feature_key: adp_fy_original_tk_cr,  column: adp_fy_original_tk_cr,  lag: 0, type: known_in_advance, transform: annual_level, segments: [STEEL], enabled: true, channels: [Corporate]}
+  - {feature_key: adp_fy_revised_tk_cr,   column: adp_fy_revised_tk_cr,   lag: 0, type: known_in_advance, transform: annual_level, segments: [STEEL], enabled: true, channels: [Corporate], catalog_var_id: CON-02}
+  - {feature_key: adp_fy_original_tk_cr,  column: adp_fy_original_tk_cr,  lag: 0, type: known_in_advance, transform: annual_level, segments: [STEEL], enabled: true, channels: [Corporate], catalog_var_id: CON-02}
   # ---- rainfall (built by fetch_rainfall.py if runnable) ----
-  - {feature_key: rainfall_anomaly_pct,   column: rainfall_anomaly_pct,   lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true, file: planning-app/data/outputs/forecast/external/ail_rainfall_monthly.csv}
+  - {feature_key: rainfall_anomaly_pct,   column: rainfall_anomaly_pct,   lag: 1, type: leading, transform: none, segments: [STEEL], enabled: true, file: planning-app/data/outputs/forecast/external/ail_rainfall_monthly.csv, catalog_var_id: WTH-01}
+
+  # ---- Phase 1 (AIL) catalog variables with no data yet: registered but disabled (status not_available) ----
+  - {feature_key: adp_spend_monthly,      column: adp_fytd_spend_tk_cr,   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: CON-01, reason: "monthly IMED spending unavailable (only sparse YTD points)"}
+  - {feature_key: mega_project_activity,  column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: CON-03, reason: "no data source built"}
+  - {feature_key: rod_price_local,        column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: CMD-01, reason: "no local rod price series built"}
+  - {feature_key: scrap_price_import,     column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: CMD-02, reason: "no scrap import price series built"}
+  - {feature_key: private_credit_growth,  column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: FIN-02, reason: "no series built"}
+  - {feature_key: gas_supply_shortfall,   column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: ENR-01, reason: "no series built"}
+  - {feature_key: load_shedding,          column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: ENR-02, reason: "no series built"}
+  - {feature_key: competitor_price_moves, column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: IND-02, reason: "no series built"}
+  - {feature_key: peer_sales_volumes,     column: null,                   lag: 0, type: check_only, segments: [STEEL], enabled: false, status: not_available, catalog_var_id: IND-01, reason: "no series built"}

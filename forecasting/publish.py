@@ -30,16 +30,42 @@ def _latest(sub: str, pointer: str | None = None):
     return runs[-1] if runs else None
 
 
-def publish() -> dict:
-    s4 = _latest("stage4", "latest_stage4.txt")
+def publish(stage4_run: str | None = None) -> dict:
+    s4 = stage4_run
+    if not s4:
+        # consume only an "ok" stage4 manifest, never a raw "latest folder"
+        base = config.OUTPUTS_DIR / "stage4"
+        candidates = sorted([p for p in base.glob("run_*") if (p / "manifest.json").exists()])
+        ok = [p for p in candidates if json.loads((p / "manifest.json").read_text(encoding="utf-8")).get("status") == "ok"]
+        if not ok:
+            raise SystemExit("no successful stage4 run (manifest status ok) found")
+        s4 = ok[-1]
+    else:
+        from pathlib import Path
+        s4 = Path(s4)
+        m = json.loads((s4 / "manifest.json").read_text(encoding="utf-8"))
+        if m.get("status") != "ok":
+            raise SystemExit(f"stage4 run {s4} status={m.get('status')} - not consumable")
     ing = _latest("", "latest_run.txt")
     if s4 is None:
         raise SystemExit("no stage4 run found - run forecasting.stage4 first")
 
     fc = pd.read_parquet(s4 / "forecasts.parquet")
     sel = json.loads((s4 / "model_selection.json").read_text(encoding="utf-8"))
-    extt = json.loads((s4 / "external_variable_tests.json").read_text(encoding="utf-8"))
+    try:
+        extt = json.loads((s4 / "external_variable_tests.json").read_text(encoding="utf-8"))
+    except Exception:
+        extt = json.loads((s4 / "external_variable_tests.json").read_text(encoding="utf-8")) if (s4 / "external_variable_tests.json").exists() else []
     holdout = json.loads((s4 / "holdout.json").read_text(encoding="utf-8"))
+    intervals = json.loads((s4 / "intervals.json").read_text(encoding="utf-8"))
+    try:
+        scenarios = json.loads((s4 / "scenarios.json").read_text(encoding="utf-8"))
+    except Exception:
+        scenarios = {}
+    try:
+        provisional = json.loads((s4 / "provisional_sensitivity.json").read_text(encoding="utf-8"))
+    except Exception:
+        provisional = {}
     try:
         metrics = pd.read_parquet(s4 / "backtest_metrics.parquet")
     except Exception:
@@ -88,13 +114,10 @@ def publish() -> dict:
         "series": series_meta,
         "detail": ui_series,
     }
-    acct_p = s4 / "accounts_top.json"
+    acct_p = s4 / "top_accounts.json"
     if acct_p.exists():
         acct = json.loads(acct_p.read_text(encoding="utf-8"))
-        payload["accounts_summary"] = {k: acct.get(k) for k in
-                                       ["summary", "bottom_up_12m_total", "direct_12m_total",
-                                        "pct_difference", "n_top_accounts", "selection"]}
-        payload["accounts"] = acct.get("accounts", [])
+        payload["accounts_summary"] = acct
     out = config.OUTPUTS_DIR / "ui"
     out.mkdir(parents=True, exist_ok=True)
     (out / "forecast_ui.json").write_text(json.dumps(payload, default=str), encoding="utf-8")
