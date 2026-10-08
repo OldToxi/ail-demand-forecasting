@@ -44,8 +44,8 @@ def run(models: list | None = None, levels: str = "company,sbu,channel,zone", sb
                 exog_s = base_exog.join(external.intervention_frame(sid, cfg, base_exog.index))
                 scale = backtest.seasonal_naive_mae(y, origins, H)
                 for mc in models_cfg:
-                    if not mc.get("enabled", True) or mc.get("accounts_only"):
-                        continue
+                    if not mc.get("enabled", True) or mc.get("accounts_only") or mc.get("zero_shot"):
+                        continue   # zero-shot handled via the torch-first subprocess below
                     if models is not None and mc["name"] not in models:
                         continue
                     rows, secs = backtest.backtest_series(y, mc["name"], mc.get("params", {}), exog_s,
@@ -58,6 +58,22 @@ def run(models: list | None = None, levels: str = "company,sbu,channel,zone", sb
                         m.update({"sbu": sbu_id, "series_id": sid, "model": mc["name"], "horizon_bucket": b})
                         all_metrics.append(m)
         metrics = pd.DataFrame(all_metrics)
+        # ---- P1.11: zero-shot (Chronos-Bolt) via torch-first subprocess, merged into the leaderboard ----
+        zs_enabled = [m["name"] for m in models_cfg if m.get("enabled", True) and m.get("zero_shot")
+                      and (models is None or m["name"] in models)]
+        if zs_enabled:
+            from . import zeroshot_runner
+            all_agg = []
+            for sbu_id in sbus.split(","):
+                sbu = next(s for s in reg["sbus"] if s["sbu_id"] == sbu_id)
+                s = build_series(sbu, config.REPO_ROOT)
+                all_agg.append(s[s.level.isin(lv)][["series_id", "month", "y"]])
+            zrows, _ = zeroshot_runner.backtest_metrics(pd.concat(all_agg, ignore_index=True), origins, cut, H)
+            if zrows:
+                metrics = pd.concat([metrics, pd.DataFrame(zrows)], ignore_index=True)
+                timings["chronos_bolt"] = timings.get("chronos_bolt", 0.0)
+            else:
+                notes.append("chronos_bolt: subprocess produced no predictions")
         metrics.to_parquet(d / "metrics.parquet", index=False)
         (d / "timings.json").write_text(json.dumps(timings, indent=2), encoding="utf-8")
         (d / "notes.json").write_text(json.dumps(notes, indent=2), encoding="utf-8")

@@ -17,6 +17,44 @@ from .series import build_series
 AG = {"company", "sbu", "channel", "zone"}
 
 
+def backtest_metrics(series_df: pd.DataFrame, origins: list, cut: pd.Period, H: int):
+    """Run Chronos-Bolt in a torch-first subprocess and return (metric_rows, preds_df).
+
+    series_df: columns series_id, month (str or Period), y. Metric rows match metrics.parquet schema.
+    """
+    import numpy as np
+    agg = series_df[series_df["series_id"].isin(series_df["series_id"].unique())].copy()
+    agg["month"] = pd.PeriodIndex(agg["month"], freq="M").astype(str)
+    outdir = config.OUTPUTS_DIR / "zeroshot"; os.makedirs(outdir, exist_ok=True)
+    sp = outdir / "series.parquet"; opp = outdir / "preds.parquet"
+    agg.to_parquet(sp, index=False)
+    r = subprocess.run([sys.executable, "-m", "forecasting.zeroshot_worker", str(sp), str(opp),
+                        json.dumps([str(o) for o in origins])], capture_output=True, text=True)
+    if r.returncode != 0 or not opp.exists():
+        return [], None
+    preds = pd.read_parquet(opp)
+    actual = {(row.series_id, row.month): row.y for row in agg.itertuples()}
+    from . import backtest
+    rows = []
+    for sid, g in preds.groupby("series_id"):
+        recs = []
+        for r_ in g.itertuples():
+            t = str(pd.Period(r_.origin, "M") + r_.horizon)
+            a = actual.get((sid, t))
+            if a is None:
+                continue
+            recs.append({"origin": r_.origin, "target": t, "horizon": r_.horizon,
+                         "actual": float(a), "pred": float(r_.pred),
+                         "abs_error": abs(r_.pred - float(a)), "err": float(r_.pred) - float(a)})
+        if not recs:
+            continue
+        summ = backtest.summarize(recs, 1.0)
+        for b, m in summ.items():
+            m.update({"sbu": "AIL", "series_id": sid, "model": "chronos_bolt", "horizon_bucket": b})
+            rows.append(m)
+    return rows, preds
+
+
 def main():
     cfg = config.load_config(); reg = config.load_sbus()
     sbu = next(s for s in reg["sbus"] if s["sbu_id"] == "AIL"); sbu["_hierarchy"] = reg["hierarchy"]

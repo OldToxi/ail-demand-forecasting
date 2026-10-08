@@ -23,7 +23,11 @@ type UIPayload = {
   series: { series_id: string; level: string; channel: string; zone: string; label: string }[];
   detail: Record<string, Detail>;
   accounts?: { account: string; series_id: string; last12: { month: string; actual_mt: number }[]; forecast: { month: string; point: number; q10: number; q90: number }[] }[];
-  accounts_summary?: { bottom_up_12m_total?: number; direct_12m_total?: number; pct_difference?: number; selection?: string };
+  accounts_summary?: { bottom_up_wape_h1_6?: number; direct_wape_h1_6?: number; selected?: string };
+  provisional?: Record<string, { pct_change?: number; flag_sensitive?: boolean }>;
+  level_tracking_weight?: Record<string, number>;
+  scenario_notes?: { series_id: string; feature: string; coef: number; ci95: number[]; verdict: string }[];
+  sensitivity_selected?: Record<string, { downweight_pct?: number; impute_pct?: number }>;
 };
 
 export default function AilForecast() {
@@ -84,7 +88,13 @@ export default function AilForecast() {
           </label>
           <span className="text-xs" style={{ color: "var(--muted)" }}>
             holdout WAPE {d.holdout?.wape_all ?? "—"} (origin {d.holdout?.origin ?? "—"})
+            {d.level_tracking_weight?.[sid] != null && <> · level-tracking weight {d.level_tracking_weight[sid]}</>}
           </span>
+          {d.provisional?.[sid]?.flag_sensitive && (
+            <span className="chip" style={{ borderColor: "var(--crit)", color: "var(--crit)" }}>
+              forecast sensitive to provisional Sep-2026 ({d.provisional[sid]?.pct_change}%)
+            </span>
+          )}
         </div>
       </div>
 
@@ -146,6 +156,20 @@ export default function AilForecast() {
         </div>
       </div>
 
+      {/* scenario effects (not estimable) */}
+      {d.scenario_notes && d.scenario_notes.filter((n) => n.series_id === sid).length > 0 && (
+        <div className="card">
+          <div className="text-sm font-medium mb-1">Scenario effects</div>
+          <ul className="list-disc ml-5 text-xs" style={{ color: "var(--ink-2)" }}>
+            {d.scenario_notes.filter((n) => n.series_id === sid).map((n) => (
+              <li key={n.feature}>
+                {n.feature}: coef {n.coef} (95% CI {n.ci95[0]}..{n.ci95[1]}) — {n.verdict}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* planner adjustments */}
       {adjust.filter((a) => a.series_id === sid).length > 0 && (
         <div className="card">
@@ -174,7 +198,7 @@ export default function AilForecast() {
             Corporate top accounts ({d.accounts.length})
             {d.accounts_summary && (
               <span className="chip" style={{ marginLeft: 8 }}>
-                bottom-up vs direct: {d.accounts_summary.pct_difference}% · selected {d.accounts_summary.selection}
+                bottom-up {d.accounts_summary.bottom_up_wape_h1_6} vs direct {d.accounts_summary.direct_wape_h1_6} · selected {d.accounts_summary.selected}
               </span>
             )}
           </button>

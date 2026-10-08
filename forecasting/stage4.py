@@ -216,6 +216,34 @@ def _scenario_delta(y, exog_s, fut_idx, cfg, H):
     return out, m
 
 
+def _sensitivity_selected(y, members, exog_s, fut_idx, ext_monthly, er, H):
+    """DQ-30 sensitivity on the SELECTED ensemble: 2025 down-weighted and 2025 imputed."""
+    def ens(yin):
+        pts = []
+        for name in members:
+            try:
+                pts.append(_fit_predict(name, yin, exog_s.reindex(yin.index), exog_s.reindex(fut_idx),
+                                        ext_monthly, er, H).point)
+            except Exception:
+                continue
+        return np.mean(pts, axis=0) if pts else np.repeat(yin.values[-1], H)
+    base = ens(y)
+    seas = y[y.index.year.isin([2023, 2024])].groupby(lambda p: p.month).mean()
+    mask = y.index.year == 2025
+    y_dw = y.copy()
+    exp = pd.Series([seas.get(p.month, y_dw.loc[p]) for p in y_dw.index[mask]], index=y_dw.index[mask])
+    y_dw.loc[mask] = 0.5 * y_dw.loc[mask] + 0.5 * exp
+    level = y[y.index.year == 2024].mean()
+    sn = seas / seas.mean() if seas.mean() else seas
+    y_imp = y.copy()
+    y_imp.loc[mask] = [sn.get(p.month, 1.0) * level for p in y_imp.index[mask]]
+    dw = ens(y_dw); im = ens(y_imp)
+    denom = max(float(base.sum()), 1.0)
+    return {"base_12m": round(float(base.sum()), 1),
+            "downweight_12m": round(float(dw.sum()), 1), "downweight_pct": round(float((dw.sum() - base.sum()) / denom * 100), 2),
+            "impute_12m": round(float(im.sum()), 1), "impute_pct": round(float((im.sum() - base.sum()) / denom * 100), 2)}
+
+
 def run(backtest_run: str, run_id: str | None = None) -> str:
     cfg = config.load_config(); reg = config.load_sbus(); er = config.load_external_registry()
     models_cfg = config._load("models.yaml")["models"]
@@ -284,6 +312,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
 
     # ---- final forecast (base + SARIMAX-delta scenarios) + reconciliation ----
     forecasts, provisional, levelweights, sc_coefs, sc_table = [], {}, {}, {}, []
+    sensitivity_selected = {}
     for sid, g in agg.groupby("series_id"):
         y = _yser(g); exog_s = train_exog.join(external.intervention_frame(sid, cfg, train_exog.index))
         sel = selection.get(sid, {})
@@ -338,6 +367,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
         ch = (base2.sum() - base.sum()) / max(base.sum(), 1) * 100
         provisional[sid] = {"base_12m": round(float(base.sum()), 1), "excl_sep2026_12m": round(float(base2.sum()), 1),
                             "pct_change": round(float(ch), 2), "flag_sensitive": bool(abs(ch) > 3)}
+        sensitivity_selected[sid] = _sensitivity_selected(y, members, exog_s, fut_idx, ext_monthly, er, H)
     fc = pd.DataFrame(forecasts)
     fc = _reconcile_forecasts(fc)
 
@@ -411,12 +441,14 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
                                                  indent=2, default=str), encoding="utf-8")
     (d / "provisional_sensitivity.json").write_text(json.dumps({"per_series": provisional,
                                                                 "level_tracking_weight": levelweights}, indent=2, default=str), encoding="utf-8")
+    (d / "sensitivity_selected.json").write_text(json.dumps(sensitivity_selected, indent=2, default=str), encoding="utf-8")
     (d / "top_accounts.json").write_text(json.dumps(topacc, indent=2, default=str), encoding="utf-8")
     (d / "clipping.json").write_text(json.dumps(clipping, indent=2, default=str), encoding="utf-8")
     (d / "backtest_run.txt").write_text(str(backtest_run), encoding="utf-8")
     run_manifest.write_manifest(d, "stage4", "ok",
         [d / "forecasts.parquet", d / "model_selection.json", d / "holdout.json", d / "intervals.json",
-         d / "scenarios.json", d / "provisional_sensitivity.json", d / "top_accounts.json", d / "clipping.json"],
+         d / "scenarios.json", d / "provisional_sensitivity.json", d / "sensitivity_selected.json",
+         d / "top_accounts.json", d / "clipping.json"],
         {"backtest_run": str(backtest_run), "widen_factor": widen})
     print("stage4 run:", d, "| holdout wape", holdout["wape_all"], "| cov80", holdout["cov80_all"], "| widen", widen)
     print("top accounts:", topacc)

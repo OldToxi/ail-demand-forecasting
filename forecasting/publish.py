@@ -113,6 +113,11 @@ def publish(stage4_run: str | None = None) -> dict:
         "holdout": holdout,
         "series": series_meta,
         "detail": ui_series,
+        "provisional": provisional.get("per_series", {}),
+        "level_tracking_weight": provisional.get("level_tracking_weight", {}),
+        "scenario_notes": scenarios.get("notes", []),
+        "sensitivity_selected": (json.loads((s4 / "sensitivity_selected.json").read_text(encoding="utf-8"))
+                                 if (s4 / "sensitivity_selected.json").exists() else {}),
     }
     acct_p = s4 / "top_accounts.json"
     if acct_p.exists():
