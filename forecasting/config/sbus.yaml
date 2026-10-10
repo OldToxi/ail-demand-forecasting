@@ -8,58 +8,59 @@ sbus:
     top_accounts: {enabled: true, n: 20, channel: Corporate}
     sources:
       - name: Corporate
-        adapter: tabular          # generic tabular adapter
-        file: Data/AIL/AIL Corporate Monthly Data-2023-2026.xlsx
-        sheet: Corporate
-        header_row: 1
-        key_style: name           # client_key = normalised name
-        column_map:
-          date: Date
-          channel: Channel
-          zone: Zone
-          client: Clients
-          manager: Manager Name
-          am: AM Name
-          quantity: MT
-          value: S.values
-          opening: OPB
-          collection: Collection
-          closing: CLB
-      - name: Intercompany
         adapter: tabular
-        file: Data/AIL/AIL-Intercompany_-2023_2026.xlsx
+        file: planning-app/data/raw/AIL-Total_Monthly-2023 to 2026.xlsx
         sheet: Data
-        header_row: 2             # title row precedes the header
+        header_row: 1
         key_style: name
-        column_map:
-          date: Date
-          channel: Channel
-          zone: Zone
-          client: Particulars
-          quantity: MT
-          value: Debit
-          opening: Balance
-          collection: Credit
-          closing: Balance.1
-      - name: Trade
-        adapter: tabular
-        file: Data/AIL/AIL-Trade_monthly-2023 to 26.xlsx
-        sheet: Data
-        header_row: 1
-        key_style: name_plus_district   # client_key = base name + District
+        filter: {column: Channel, value: Corporate}
         column_map:
           date: Date
           channel: Channel
           zone: Zone
           client: Dealer Name
+          district: Districts
           manager: ZM Name
           am: TM/TO Name
-          district: Districts
-          quantity: Sales
+          quantity: Sales In MT
           value: Sales values
-          opening: Opening Balance
           collection: Collection
-          closing: Closing Balance
+      - name: Intercompany
+        adapter: tabular
+        file: planning-app/data/raw/AIL-Total_Monthly-2023 to 2026.xlsx
+        sheet: Data
+        header_row: 1
+        key_style: name
+        filter: {column: Channel, value: Intercompany}
+        column_map:
+          date: Date
+          channel: Channel
+          zone: Zone
+          client: Dealer Name
+          district: Districts
+          manager: ZM Name
+          am: TM/TO Name
+          quantity: Sales In MT
+          value: Sales values
+          collection: Collection
+      - name: Trade
+        adapter: tabular
+        file: planning-app/data/raw/AIL-Total_Monthly-2023 to 2026.xlsx
+        sheet: Data
+        header_row: 1
+        key_style: name_plus_district
+        filter: {column: Channel, value: Trade}
+        column_map:
+          date: Date
+          channel: Channel
+          zone: Zone
+          client: Dealer Name
+          district: Districts
+          manager: ZM Name
+          am: TM/TO Name
+          quantity: Sales In MT
+          value: Sales values
+          collection: Collection
 
 # Hierarchy: composed automatically; child series sum exactly to parents.
 hierarchy:

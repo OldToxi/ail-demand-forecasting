@@ -62,7 +62,12 @@ def read_raw(source_cfg, base_dir) -> pd.DataFrame:
     else:
         df = pd.read_excel(path, sheet_name=source_cfg.get("sheet"), header=header)
     # drop trailing junk columns from the export
-    return df.loc[:, [c for c in df.columns if not str(c).startswith("Unnamed")]]
+    df = df.loc[:, [c for c in df.columns if not str(c).startswith("Unnamed")]]
+    # optional row filter: one consolidated file can back multiple named sources
+    f = source_cfg.get("filter")
+    if f:
+        df = df[df[f["column"]] == f["value"]]
+    return df
 
 
 def to_standard(raw: pd.DataFrame, source_cfg, sbu_id: str, gaz: LocationGazetteer | None = None) -> pd.DataFrame:

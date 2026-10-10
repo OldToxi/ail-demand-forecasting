@@ -16,6 +16,7 @@ from . import backtest, config, external, run_manifest
 from .adapters import load_all
 from .models import build_model
 from .models import statistical
+from .report_extra import item2_best_model_tests
 from .series import build_series
 
 AG = {"company", "sbu", "channel", "zone"}
@@ -427,6 +428,9 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
         mo = e.get("context", {}).get("model", "?")
         clipping["backtest_by_model"][mo] = clipping["backtest_by_model"].get(mo, 0) + e.get("n_clipped", 0)
 
+    # ---- external-variable best-model tests (re-emit for publish) ----
+    ext_tests = item2_best_model_tests(cfg, ext_monthly, base_exog, series, origins)
+
     # ---- write ----
     run_id = run_id or run_manifest.new_run_id()
     d = config.OUTPUTS_DIR / "stage4" / f"run_{run_id}"; d.mkdir(parents=True, exist_ok=True)
@@ -444,11 +448,12 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     (d / "sensitivity_selected.json").write_text(json.dumps(sensitivity_selected, indent=2, default=str), encoding="utf-8")
     (d / "top_accounts.json").write_text(json.dumps(topacc, indent=2, default=str), encoding="utf-8")
     (d / "clipping.json").write_text(json.dumps(clipping, indent=2, default=str), encoding="utf-8")
+    (d / "external_variable_tests.json").write_text(json.dumps(ext_tests, indent=2, default=str), encoding="utf-8")
     (d / "backtest_run.txt").write_text(str(backtest_run), encoding="utf-8")
     run_manifest.write_manifest(d, "stage4", "ok",
         [d / "forecasts.parquet", d / "model_selection.json", d / "holdout.json", d / "intervals.json",
          d / "scenarios.json", d / "provisional_sensitivity.json", d / "sensitivity_selected.json",
-         d / "top_accounts.json", d / "clipping.json"],
+         d / "top_accounts.json", d / "clipping.json", d / "external_variable_tests.json"],
         {"backtest_run": str(backtest_run), "widen_factor": widen})
     print("stage4 run:", d, "| holdout wape", holdout["wape_all"], "| cov80", holdout["cov80_all"], "| widen", widen)
     print("top accounts:", topacc)
