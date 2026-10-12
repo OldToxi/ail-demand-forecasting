@@ -14,6 +14,14 @@ models:
   - {name: croston_sba,    enabled: true, accounts_only: true}
   - {name: tsb,            enabled: true, accounts_only: true}
   - {name: hurdle,         enabled: true, accounts_only: true}
+  # seasonality-capable candidates (bake-off)
+  - {name: auto_arima,     enabled: true}
+  - {name: auto_ets,       enabled: true}
+  - {name: auto_theta,     enabled: true}
+  - {name: mstl,           enabled: true}
+  - {name: tbats,          enabled: false}
+  - {name: fourier_ols,    enabled: false}
+  - {name: ets_mul,        enabled: true}
   # zero-shot: enabled but skipped gracefully if the backend/weights are unavailable
   - {name: timesfm,        enabled: true, zero_shot: true}
   - {name: chronos_bolt,   enabled: true, zero_shot: true}

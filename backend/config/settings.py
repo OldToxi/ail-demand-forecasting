@@ -1,11 +1,12 @@
 """Planning App backend settings.
 
-Minimal Django service that only serves the three planning tabs from precomputed
-artifacts in `data/outputs/`:
+Minimal Django service that serves the AIL forecast from precomputed artifacts in
+`data/outputs/forecast/` via the following endpoints:
 
-    Demand Forecast   -> data/outputs/demand_planning/demand_forecast_v2.json, bakeoff_leaderboard.json
-    Demand Planning   -> data/outputs/demand_planning/market_target.json
-    Production        -> data/outputs/data/production_material_forecast.csv (+ meta/history/by_type)
+    /api/forecast/ui        -> UI configuration for the forecast
+    /api/forecast/template  -> planner upload template
+    /api/forecast/planner   -> planner adjustments
+    /api/health             -> service health check
 
 No models, no database tables needed (sqlite stays only because Django wants a DB configured).
 """

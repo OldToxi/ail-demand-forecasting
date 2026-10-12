@@ -21,6 +21,7 @@ forecasting/**/.cache/
 # ---- environments ----
 .venv/
 .venv-forecast/
+.venv-forecast-pinned/
 venv/
 env/
 __pycache__/

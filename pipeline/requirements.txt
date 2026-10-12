@@ -1,9 +1,0 @@
-# Pipeline dependencies (raw data -> tab artifacts)
-pandas>=2.0
-numpy>=1.26
-pyarrow>=15.0
-openpyxl>=3.1
-xlsxwriter>=3.2
-scipy>=1.11
-statsmodels>=0.14
-pmdarima>=2.0

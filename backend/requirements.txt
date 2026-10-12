@@ -1,3 +1,1 @@
 Django==5.2.15
-pandas>=2.0
-pyarrow>=15.0

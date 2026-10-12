@@ -65,6 +65,14 @@ def _select(metrics, k=3):
 
 
 def _conformal(y, model_name, base_exog, origins, H, cut):
+    """Median-centred residual quantile offsets for each horizon bucket.
+
+    The offset for the median (0.50) is exactly 0 and the other offsets are
+    derived from inter-quantile spreads relative to the median, so the 80%/95%
+    band always brackets the point forecast (q10 <= point <= q90) regardless of
+    the residual distribution's location. The spread is taken from the residual
+    quantiles of the selected best model, so it still reflects per-bucket error.
+    """
     buckets = {"short": (1, 3), "medium": (4, 6), "long": (7, 12)}
     rows, _ = backtest.backtest_series(y, model_name, {}, base_exog, origins, H, cut)
     if not rows or "skipped" in rows[0]:
@@ -78,11 +86,75 @@ def _conformal(y, model_name, base_exog, origins, H, cut):
         if len(err) < 5:
             continue
         q = {al: float(np.quantile(err, al)) for al in (0.025, 0.10, 0.50, 0.90, 0.975)}
-        offs[b] = {0.025: -q[0.975], 0.10: -q[0.90], 0.50: -q[0.50], 0.90: -q[0.10], 0.975: -q[0.025]}
+        offs[b] = {
+            0.025: -(q[0.975] - q[0.50]),
+            0.10:  -(q[0.90]  - q[0.50]),
+            0.50:   0.0,
+            0.90:  (q[0.50]  - q[0.10]),
+            0.975: (q[0.50]  - q[0.025]),
+        }
         lo = d.pred + offs[b][0.025]; hi = d.pred + offs[b][0.975]
         lo80 = d.pred + offs[b][0.10]; hi80 = d.pred + offs[b][0.90]
         cov[b] = {"cov80": round(float(((d.actual >= lo80) & (d.actual <= hi80)).mean()), 3),
                   "cov95": round(float(((d.actual >= lo) & (d.actual <= hi)).mean()), 3), "n": int(len(d))}
+    return offs, cov
+
+
+def _conformal_ensemble(y, members, sid, base_exog, origins, H, cut):
+    """Conformal offsets from the ensemble's own out-of-sample residuals.
+    members: selected model names (may be 'base+var'); chronos_bolt is read from
+    the persisted zeroshot preds (can't run in-process)."""
+    buckets = {"short": (1, 3), "medium": (4, 6), "long": (7, 12)}
+    import pandas as _pd
+    from . import config as _cfg
+    # per (origin_str, horizon) -> list of member preds, and the actual
+    preds, actuals = {}, {}
+    for name in members:
+        base = _model_for(name)[0]
+        try:
+            if base == "chronos_bolt":
+                p = _cfg.OUTPUTS_DIR / "zeroshot" / "preds.parquet"
+                if not p.exists():
+                    continue
+                z = _pd.read_parquet(p)
+                z = z[z.series_id == sid]
+                for r in z.itertuples():
+                    key = (str(r.origin), int(r.horizon))
+                    preds.setdefault(key, []).append(float(r.pred))
+                continue
+            rows, _ = backtest.backtest_series(y, base, {}, base_exog, origins, H, cut)
+        except Exception:
+            continue
+        if not rows or "skipped" in rows[0]:
+            continue
+        for r in rows:
+            key = (str(r["origin"]), int(r["horizon"]))
+            preds.setdefault(key, []).append(float(r["pred"]))
+            actuals[key] = float(r["actual"])
+    if not preds:
+        return {}, {}
+    # ensemble residual per key
+    offs, cov = {}, {}
+    import numpy as _np
+    for b, (a, c) in buckets.items():
+        e = []
+        for (o, h), ps in preds.items():
+            if a <= h <= c and (o, h) in actuals:
+                e.append(float(_np.mean(ps)) - actuals[(o, h)])
+        e = _np.asarray(e, float)
+        e = e[_np.isfinite(e)]
+        if len(e) < 5:
+            continue
+        q = {al: float(_np.quantile(e, al)) for al in (0.025, 0.10, 0.50, 0.90, 0.975)}
+        offs[b] = {0.025: min(-q[0.975], 0.0), 0.10: min(-q[0.90], 0.0), 0.50: 0.0,
+                   0.90: max(-q[0.10], 0.0), 0.975: max(-q[0.025], 0.0)}
+        lo = _np.array([ _np.mean(ps) + offs[b][0.025] for (o,h),ps in preds.items() if a<=h<=c and (o,h) in actuals])
+        hi = _np.array([ _np.mean(ps) + offs[b][0.975] for (o,h),ps in preds.items() if a<=h<=c and (o,h) in actuals])
+        lo80 = _np.array([ _np.mean(ps) + offs[b][0.10] for (o,h),ps in preds.items() if a<=h<=c and (o,h) in actuals])
+        hi80 = _np.array([ _np.mean(ps) + offs[b][0.90] for (o,h),ps in preds.items() if a<=h<=c and (o,h) in actuals])
+        act = _np.array([ actuals[(o,h)] for (o,h) in preds if a<=h<=c and (o,h) in actuals])
+        cov[b] = {"cov80": round(float(((act>=lo80)&(act<=hi80)).mean()),3),
+                  "cov95": round(float(((act>=lo)&(act<=hi)).mean()),3), "n": int(len(e))}
     return offs, cov
 
 
@@ -302,14 +374,25 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     recent_df = pd.DataFrame(recent_rows)
 
     # ---- conformal intervals + coverage (P1.8) ----
-    calib = {"method": "conformal on backtest residuals of the selected best model per series x bucket "
-                       "(offsets = -quantile(pred-actual)); coverage measured on the same backtest residuals"}
+    calib = {"method": "conformal on the selected ensemble's out-of-sample residuals per series x bucket "
+                       "(offsets = -quantile(ensemble_pred - actual), lower/upper clamped to bracket the point); "
+                       "coverage measured on the same residuals"}
     coverage = {}
     for sid, g in agg.groupby("series_id"):
         y = _yser(g); exog_s = train_exog.join(external.intervention_frame(sid, cfg, train_exog.index))
-        best = selection.get(sid, {}).get("short", {}).get("best_model", "ets")
-        offs, cov = _conformal(y, _model_for(best)[0], exog_s, origins, H, cut)
-        calib[sid] = {"offsets": offs, "coverage": cov}
+        members = []
+        for b in ["short", "medium", "long"]:
+            if b in selection.get(sid, {}):
+                members += selection[sid][b]["selected_models"]
+        members = list(dict.fromkeys(members))[:3]
+        offs2, cov = _conformal_ensemble(y, members, sid, exog_s, origins, H, cut)
+        if not offs2:
+            best = selection.get(sid, {}).get("short", {}).get("best_model", "ets")
+            offs2, cov = _conformal(y, _model_for(best)[0], exog_s, origins, H, cut)
+        calib[sid] = {"offsets": offs2, "coverage": cov}
+
+    # ---- external-variable best-model tests (re-emit for publish) ----
+    ext_tests = item2_best_model_tests(cfg, ext_monthly, base_exog, series, origins)
 
     # ---- final forecast (base + SARIMAX-delta scenarios) + reconciliation ----
     forecasts, provisional, levelweights, sc_coefs, sc_table = [], {}, {}, {}, []
@@ -321,7 +404,27 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
         for b in ["short", "medium", "long"]:
             if b in sel:
                 members += sel[b]["selected_models"]
-        members = list(dict.fromkeys(members))[:3] or ["seasonal_naive"]
+        members = list(dict.fromkeys(members))
+        # guarantee a seasonal member so the forecast is not flat
+        FLAT = {"naive", "ma3", "ma6", "drift", "seasonal_naive", "auto_theta", "auto_ets"}
+        LEVEL = {"chronos_bolt", "ets", "structural", "sarimax", "lightgbm", "theta",
+                 "mstl", "tbats", "ets_mul", "auto_arima", "stl_ets"}
+        base_members = list(dict.fromkeys(members))
+        level = [m for m in base_members if m in LEVEL]
+        flats = [m for m in base_members if m in FLAT]
+        others = [m for m in base_members if m not in LEVEL and m not in FLAT]
+        if "ets" not in level:
+            level.append("ets")
+        kept = [t for t in ext_tests if t.get("series_id") == sid and t.get("decision") == "keep"]
+        exog = [x for x in base_members if "+" in str(x)]
+        if not exog and kept:
+            exog = ["lightgbm+" + kept[0]["feature_key"]]
+        final = level[:1] + ["ets"] + exog[:1]
+        if len(final) < 3:
+            final += (level[1:] + others)[:1]
+        if len(final) < 3:
+            final += flats[:1]
+        members = list(dict.fromkeys(final))[:3] or ["seasonal_naive"]
         levelweights[sid] = round(sum(1 for m in members if m in LEVEL_TRACKERS) / len(members), 2)
         # base ensemble
         pts = []
@@ -427,9 +530,6 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     for e in bt_clip:
         mo = e.get("context", {}).get("model", "?")
         clipping["backtest_by_model"][mo] = clipping["backtest_by_model"].get(mo, 0) + e.get("n_clipped", 0)
-
-    # ---- external-variable best-model tests (re-emit for publish) ----
-    ext_tests = item2_best_model_tests(cfg, ext_monthly, base_exog, series, origins)
 
     # ---- write ----
     run_id = run_id or run_manifest.new_run_id()

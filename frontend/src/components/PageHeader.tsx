@@ -11,10 +11,16 @@ export default function PageHeader({
   right?: ReactNode;
 }) {
   return (
-    <div className="mb-1 flex flex-wrap items-start justify-between gap-3">
+    <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold" style={{ color: "var(--ink)" }}>{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm" style={{ color: "var(--muted)" }}>{subtitle}</p>}
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 650, lineHeight: 1.2, color: "var(--ink)" }}>
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+            {subtitle}
+          </p>
+        )}
       </div>
       {right && <div className="flex flex-wrap items-center gap-3">{right}</div>}
     </div>

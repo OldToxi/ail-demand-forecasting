@@ -12,6 +12,14 @@ import pandas as pd
 
 from . import config
 
+def _r4(x):
+    """Round to 4 decimal places, coercing NaN -> None for JSON serialisation."""
+    if x is None:
+        return None
+    x = float(x)
+    return None if x != x else round(x, 4)
+
+
 CAVEATS = [
     "Demand forecast (based on sales) - saleproxies demand.",
     "2024-25 structural break (DQ-31): level shift, not seasonality.",
@@ -71,6 +79,25 @@ def publish(stage4_run: str | None = None) -> dict:
     except Exception:
         metrics = pd.DataFrame()
 
+    # ── model leaderboard: mean across the 9 aggregate series, one row per model ──
+    # Only models evaluated on every aggregate series are ranked (the lightgbm+external
+    # variants are only backtested on 1-2 series and would dominate on a partial mean).
+    leaderboard = []
+    if not metrics.empty:
+        n_series = metrics.series_id.nunique()
+        for model, g in metrics.groupby("model"):
+            if g.series_id.nunique() != n_series:
+                continue
+            row = {"model": model}
+            for b in ["short", "medium", "long", "all"]:
+                sub = g[g.horizon_bucket == b]
+                row[f"wape_{b}"] = _r4(float(sub.wape.mean())) if len(sub) else None
+            sub_all = g[g.horizon_bucket == "all"]
+            row["bias_all"] = _r4(float(sub_all.bias.mean())) if len(sub_all) else None
+            row["mase_all"] = _r4(float(sub_all.mase.mean())) if len(sub_all) else None
+            leaderboard.append(row)
+        leaderboard.sort(key=lambda e: (e["wape_all"] is None, e["wape_all"]))
+
     actuals = {}
     if ing is not None and (ing / "actuals.parquet").exists():
         a = pd.read_parquet(ing / "actuals.parquet")
@@ -113,6 +140,8 @@ def publish(stage4_run: str | None = None) -> dict:
         "holdout": holdout,
         "series": series_meta,
         "detail": ui_series,
+        "leaderboard": leaderboard,
+        "champion": leaderboard[0]["model"] if leaderboard else None,
         "provisional": provisional.get("per_series", {}),
         "level_tracking_weight": provisional.get("level_tracking_weight", {}),
         "scenario_notes": scenarios.get("notes", []),

@@ -1,7 +1,7 @@
 """Model registry: build a model instance from a config name. New models register here."""
 from __future__ import annotations
 
-from . import baselines, intermittent, ml, statistical, zeroshot
+from . import baselines, intermittent, ml, seasonal, statistical, zeroshot
 
 _BUILDERS = {
     "naive": lambda p: baselines.Naive(),
@@ -21,6 +21,13 @@ _BUILDERS = {
     "timesfm": lambda p: zeroshot.TimesFM(),
     "chronos_bolt": lambda p: zeroshot.ChronosBolt(),
     "moirai": lambda p: zeroshot.Moirai(),
+    "auto_arima": lambda p: seasonal.AutoARIMA(),
+    "auto_ets": lambda p: seasonal.AutoETS(),
+    "auto_theta": lambda p: seasonal.AutoTheta(),
+    "mstl": lambda p: seasonal.MSTL(),
+    "tbats": lambda p: seasonal.AutoTBATS(),
+    "fourier_ols": lambda p: seasonal.FourierOLS(),
+    "ets_mul": lambda p: seasonal.ETSMul(),
 }
 
 

@@ -1,4 +1,4 @@
-# Boot the Planning App: installs deps, migrates, starts backend (:8000) + frontend (:3000).
+# Boot the Planning App: installs backend + frontend deps, migrates, starts backend (:8000) + frontend (:3000).
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 
@@ -8,11 +8,6 @@ Write-Host "Planning App -- setup" -ForegroundColor Cyan
 Push-Location "$root\backend"
 python -m pip install -q -r requirements.txt
 python manage.py migrate --noinput | Out-Null
-Pop-Location
-
-# ---- pipeline deps (for rebuilding artifacts later) ----
-Push-Location "$root\pipeline"
-python -m pip install -q -r requirements.txt
 Pop-Location
 
 # ---- frontend deps ----

@@ -1,27 +1,24 @@
-# Planning App — Demand Forecast · Demand Planning · Production Planning
+# Planning App — AIL Demand Forecast
 
-A focused, standalone system built from the Akij sales-forecasting codebase, containing the three
-cement planning tabs plus the **AIL steel demand-forecast page**, served by a
+A standalone demand-forecasting app for Anwar Ispat (AIL) steel. It reads one consolidated sales
+source and serves a 12-month demand forecast on the `/ail-forecast` page, driven by a
 **raw-data → artifact → serve** pipeline.
 
 ```
 planning-app/
-  backend/     Django service — serves the tabs from data/outputs/ (no database tables)
-  frontend/    Next.js app — the 3 cement tabs + the AIL forecast page
-  pipeline/    data pipeline: raw data -> data/outputs/ (the artifacts the backend serves)
+  backend/      Django service — serves the AIL forecast page from data/outputs/forecast/ (no database tables)
+  frontend/     Next.js app — the /ail-forecast page
+  forecasting/  Python package — the data pipeline (raw data -> data/outputs/forecast/)
   data/
-    raw/       <- drop source files here (see data/raw/README.md; holds the AIL consolidated xlsx)
-    interim/   <- upstream parquet releases (final_quantity_forecast, item_monthly_panel)
-    outputs/   <- generated artifacts (seeded so the app runs immediately)
+    raw/        <- the AIL consolidated source (see data/raw/README.md)
+    outputs/
+      forecast/ <- generated forecasting artifacts (seeded so the app runs immediately)
 ```
 
-## The tabs
+## The page
 
-| Tab | Route | API | Artifact(s) |
-|-----|-------|-----|-------------|
-| Demand Forecast | `/demand-forecast-planning` | `/api/demand-planning/demand-forecast-v2`, `/bakeoff` | `demand_forecast_v2.json`, `bakeoff_leaderboard.json` |
-| Demand Planning | `/demand-planning` | `/api/demand-planning/market-target` | `market_target.json` |
-| Production Planning | `/production` | `/api/production/units`, `/api/production/materials?unit=` | `production_material_forecast.csv` (+ meta/history/by_type) |
+| Page | Route | API | Artifact(s) |
+|------|-------|-----|-------------|
 | AIL Forecast | `/ail-forecast` | `/api/forecast/ui`, `/api/forecast/template`, `/api/forecast/planner` | `data/outputs/forecast/ui/forecast_ui.json` |
 
 The frontend proxies `/api` → `http://127.0.0.1:8000` (see `frontend/next.config.ts`), so both run
@@ -53,35 +50,36 @@ npm run dev
 
 ## The pipeline
 
-`pipeline/run_pipeline.py` turns raw data into the artifacts the tabs read.
+The pipeline is the `forecasting` Python package. It turns the single AIL source into the artifacts
+the page reads, and runs in its pinned venv:
 
 ```powershell
 cd planning-app
-python -m pip install -r pipeline/requirements.txt
-
-python pipeline/run_pipeline.py --list        # show required inputs vs present
-python pipeline/run_pipeline.py               # build every stage whose inputs exist
-python pipeline/run_pipeline.py --stage production
+.\.venv-forecast-pinned\Scripts\python.exe -m forecasting.run_forecast
+# stages: ingest -> backtest(run id) -> stage4(explicit backtest run id) -> publish -> planner
 ```
 
-Stages run in dependency order: `production` → `demand-forecast` → `demand-planning` (the cement tabs),
-plus the AIL demand-forecast stage (see below). Steps whose raw inputs are missing are skipped with a
-clear message, so the app keeps serving the last good artifacts.
+It reads the single source of truth `data/raw/AIL-Total_Monthly-2023 to 2026.xlsx` (sheet `Data`,
+split into Corporate / Intercompany / Trade by `Channel`) and publishes
+`data/outputs/forecast/ui/forecast_ui.json`.
 
-### Raw inputs
+### Artifact layout (`outputs/forecast/`)
 
-- **Cement tabs** read files from `data/raw/` — see `data/raw/README.md` for the full list and expected
-  columns. The Production stage additionally needs the upstream parquet release in `data/interim/`
-  (`final_quantity_forecast.parquet`, `item_monthly_panel.parquet`).
-- **AIL forecast** reads the consolidated `data/raw/AIL-Total_Monthly-2023 to 2026.xlsx` (sheet `Data`,
-  split into Corporate / Intercompany / Trade by `Channel`). It runs in its own pinned venv —
-  `.\.venv-forecast-pinned\Scripts\python.exe -m forecasting.run_forecast` — and publishes
-  `data/outputs/forecast/ui/forecast_ui.json`. See `docs/forecasting/README.md`.
+```
+outputs/forecast/
+  run_<id>/             ingest artifacts (actuals, series, DQ gate, feature registry, run metadata)
+  backtest/run_<id>/    backtest leaderboard + per-origin metrics
+  stage4/run_<id>/      selection, scenarios, intervals, holdout, top accounts
+  ui/forecast_ui.json   the payload the /ail-forecast page reads
+  ui/planner_adjustments.json  published planner adjustments (statistical vs adjusted)
+  zeroshot/             zero-shot (Chronos-Bolt) predictions + series
+  external/             ail_rainfall_monthly.csv (external feature)
+  state_check/          state-check catalog
+```
+
+See `docs/forecasting/README.md` for the full pipeline, configuration and results.
 
 ## Notes
 
-- This is the requested slice of `webapp/` — the other pages (dashboard, explore, review, items,
-  supply-chain, login, bake-off) are intentionally **not** included. The AIL forecast page
-  (`/ail-forecast`) is a new addition on top of that slice.
-- The backend reads files on every request (mtime-cached), so after a pipeline run the tabs pick
+- The backend reads files on every request (mtime-cached), so after a pipeline run the page picks
   up new artifacts without a restart.
