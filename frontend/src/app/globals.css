@@ -10,11 +10,11 @@
   --page: #f6f7f9; --surface-1: #ffffff; --surface-2: #f2f4f7; --surface-3: #e9edf2;
   --ink: #12161c; --ink-2: #495059; --muted: #79818c;
   --grid: #e6e9ee; --axis: #ccd2da;
-  --brand: #2f6fec; --brand-weak: #e7efff; --band: #dbe7fd;
-  --good: #16a34a; --warn: #d97706; --crit: #dc2626;
-  --c-actual: #94a3b8; --c-forecast: #2f6fec; --c-band: #dbe7fd;
-  --acc-demand: #2f6fec; --acc-region: #e0894a; --acc-model: #2f9e6b; --acc-history: #8a6fd1;
-  --cat-1: #2f6fec; --cat-2: #e0894a; --cat-3: #2f9e6b; --cat-4: #c05299; --cat-5: #8a6fd1; --cat-6: #cf5c5c; --cat-7: #3f9fbf; --cat-8: #b08968; --cat-9: #6b7a8f; --cat-10: #8bab3c; --cat-11: #9b7bb8; --cat-12: #4f9e92;
+  --brand: #f80000; --brand-strong: #c40000; --brand-weak: #fde7e7; --brand-ink: #ffffff;
+  --band: #dbe7fd; --c-actual: #6b7280; --c-forecast: #2f6fec; --c-band: #dbe7fd;
+  --acc-demand: #2f6fec; --acc-region: #b45309; --acc-model: #0f766e; --acc-history: #4f46e5;
+  --good: #0f9d58; --warn: #b45309; --crit: #b00020;
+  --cat-1: #2f6fec; --cat-2: #b45309; --cat-3: #0f766e; --cat-4: #c026d3; --cat-5: #4f46e5; --cat-6: #64748b; --cat-7: #0891b2; --cat-8: #92400e; --cat-9: #475569; --cat-10: #65a30d; --cat-11: #7c3aed; --cat-12: #0d9488;
   --radius: 0.85rem; --radius-sm: 0.55rem;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.05);
   --shadow-lift: 0 10px 28px rgba(16, 24, 40, 0.12);
@@ -24,11 +24,11 @@
     --page: #0c0e12; --surface-1: #161a20; --surface-2: #1e232b; --surface-3: #262c35;
     --ink: #f3f5f8; --ink-2: #c2c9d2; --muted: #8a929c;
     --grid: #282e37; --axis: #3a424d;
-    --brand: #4d8bff; --brand-weak: #172a47; --band: #1e3357;
+    --brand: #ff4d4d; --brand-strong: #ff6b6b; --brand-weak: #3a0d0d; --brand-ink: #ffffff;
+    --band: #1e3357; --c-actual: #9aa3af; --c-forecast: #4d8bff; --c-band: #1e3357;
+    --acc-demand: #4d8bff; --acc-region: #f59e0b; --acc-model: #2dd4bf; --acc-history: #818cf8;
     --good: #22c55e; --warn: #f59e0b; --crit: #f87171;
-    --c-actual: #5b6675; --c-forecast: #4d8bff; --c-band: #1e3357;
-    --acc-demand: #4d8bff; --acc-region: #f0954f; --acc-model: #34b47f; --acc-history: #a48bf0;
-    --cat-1: #4d8bff; --cat-2: #f0954f; --cat-3: #34b47f; --cat-4: #e070b8; --cat-5: #a48bf0; --cat-6: #ef6e6e; --cat-7: #4fb8d4; --cat-8: #c39a78; --cat-9: #8593a6; --cat-10: #a8c45c; --cat-11: #b79bd0; --cat-12: #63b6ab;
+    --cat-1: #4d8bff; --cat-2: #f0954f; --cat-3: #2dd4bf; --cat-4: #e879c9; --cat-5: #818cf8; --cat-6: #94a3b8; --cat-7: #22d3ee; --cat-8: #d6a26b; --cat-9: #94a3b8; --cat-10: #a3e635; --cat-11: #a78bfa; --cat-12: #2dd4bf;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.35);
     --shadow-lift: 0 12px 30px rgba(0, 0, 0, 0.55);
   }

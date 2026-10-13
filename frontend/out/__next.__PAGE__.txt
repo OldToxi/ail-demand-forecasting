@@ -1,6 +1,9 @@
 1:"$Sreact.fragment"
-2:I[22016,["/_next/static/chunks/2ca4phtjopm0d.js","/_next/static/chunks/1-8s9_t85wwr4.js"],""]
-3:I[97367,["/_next/static/chunks/2ca4phtjopm0d.js","/_next/static/chunks/1-8s9_t85wwr4.js"],"OutletBoundary"]
-4:"$Sreact.suspense"
-0:{"rsc":["$","$1","c",{"children":[["$","div",null,{"className":"space-y-6","children":[["$","div",null,{"children":[["$","h1",null,{"className":"text-2xl font-semibold","style":{"color":"var(--ink)"},"children":"AIL Demand Forecast"}],["$","p",null,{"className":"mt-1 text-sm","style":{"color":"var(--muted)"},"children":"AIL demand forecasting — 12-month steel sales-based forecast with scenarios and planner adjustments."}]]}],["$","div",null,{"className":"grid gap-4 md:grid-cols-3","children":["$","$L2","/ail-forecast",{"href":"/ail-forecast","className":"card card-hover block","style":{"borderColor":"color-mix(in srgb, var(--brand) 35%, var(--grid))"},"children":[["$","div",null,{"className":"text-xs font-semibold uppercase tracking-wider","style":{"color":"var(--brand)"},"children":"open"}],["$","div",null,{"className":"mt-1 text-lg font-semibold","style":{"color":"var(--ink)"},"children":"AIL Demand Forecast"}],["$","p",null,{"className":"mt-1 text-sm","style":{"color":"var(--muted)"},"children":"12-month statistical demand forecast from AIL steel sales — channel, zone and corporate top-accounts, with scenarios and planner adjustments."}]]}]}]]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"ZORuaG0f-mll3Gb2JYtET"}
-5:null
+2:I[47257,["/_next/static/chunks/3dx7c-345iem_.js","/_next/static/chunks/1-8s9_t85wwr4.js"],"ClientPageRoot"]
+3:I[52683,["/_next/static/chunks/3dx7c-345iem_.js","/_next/static/chunks/1-8s9_t85wwr4.js","/_next/static/chunks/1y8ft43uu-f0k.js"],"default"]
+6:I[97367,["/_next/static/chunks/3dx7c-345iem_.js","/_next/static/chunks/1-8s9_t85wwr4.js"],"OutletBoundary"]
+7:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","$L2",null,{"Component":"$3","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@4","$@5"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/1y8ft43uu-f0k.js","async":true}]],["$","$L6",null,{"children":["$","$7",null,{"name":"Next.MetadataOutlet","children":"$@8"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"H72RzOB4tyE1SHbEG6jCG"}
+4:{}
+5:"$0:rsc:props:children:0:props:serverProvidedParams:params"
+8:null

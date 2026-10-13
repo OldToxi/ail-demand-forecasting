@@ -50,7 +50,12 @@ def backtest_metrics(series_df: pd.DataFrame, origins: list, cut: pd.Period, H: 
                          "abs_error": abs(r_.pred - float(a)), "err": float(r_.pred) - float(a)})
         if not recs:
             continue
-        summ = backtest.summarize(recs, 1.0)
+        s = series_df[series_df["series_id"] == sid].copy()
+        s["month"] = pd.PeriodIndex(s["month"], freq="M")
+        s = s.sort_values("month")
+        y_sid = pd.Series(s["y"].values, index=s["month"])
+        scale = backtest.seasonal_naive_mae(y_sid, origins, H)
+        summ = backtest.summarize(recs, scale)
         for b, m in summ.items():
             m.update({"sbu": "AIL", "series_id": sid, "model": "chronos_bolt", "horizon_bucket": b})
             rows.append(m)

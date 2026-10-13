@@ -98,6 +98,7 @@ def summarize(rows: list[dict], scale_mae: float) -> dict:
     # overall
     sa = df.actual.abs().sum()
     out["all"] = {"wape": round(float(df.abs_error.sum() / max(sa, 1e-9)), 4),
+                  "mase": round(float(df.abs_error.mean() / max(scale_mae, 1e-9)), 4),
                   "bias": round(float(df.err.sum() / max(sa, 1e-9)), 4),
                   "n_origins": int(df.origin.nunique()), "n": int(len(df))}
     return out

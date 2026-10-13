@@ -2,7 +2,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import {
   ComposedChart, Bar, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  BarChart, Cell, LabelList, ReferenceLine,
+  BarChart, Cell, LabelList, ReferenceLine, ReferenceDot,
 } from "recharts";
 import { apiGet, fmt } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
@@ -55,7 +55,7 @@ const sumPoints = (arr: FPoint[]): number => arr.reduce((a, f) => a + f.point, 0
 const sumActuals = (arr: Act[]): number => arr.reduce((a, x) => a + x.actual_mt, 0);
 
 // crore = 10,000,000 (1e7)
-const crore = (v?: number | null): string => (v == null ? "—" : `${(v / 1e7).toFixed(1)}`);
+const crore = (v?: number | null): string => (v == null ? "—" : (v / 1e7).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 
 // one row of the continuous past→forecast series
 type TotalChartRow = {
@@ -157,7 +157,7 @@ function DrillIn({ kind, name, share, annual, detail, accent, onClose }: {
             <YAxis stroke="transparent" tick={{ fill: "var(--muted)", fontSize: 9 }} tickFormatter={(v) => fmt(v)} width={48} />
             <Tooltip formatter={(v, n) => [`${fmt(v as number)} MT`, n === "past" ? "Actual" : n === "trend" ? "Trend" : "Forecast"]}
                      contentStyle={{ background: "var(--surface-1)", border: "1px solid var(--grid)", borderRadius: 10, fontSize: 12, boxShadow: "var(--shadow)" }} />
-            <Legend wrapperStyle={{ fontSize: 10 }} />
+            <Legend verticalAlign="top" align="left" wrapperStyle={{ fontSize: 10 }} />
             <Bar dataKey="past" name="Actual" fill="var(--c-actual)" radius={[2, 2, 0, 0]} isAnimationActive={false} />
             <Bar dataKey="future" name="Forecast" fill={accent} radius={[2, 2, 0, 0]} isAnimationActive={false} />
             <Line dataKey="trend" name="Trend" type="monotone" stroke="var(--ink-2)"
@@ -269,10 +269,13 @@ export default function AilForecast() {
     ...compActuals.map((a) => ({
       label: monthLabel(a.month), actual: a.actual_mt, fc: null, band: null, q10: null, q90: null,
     })),
-    ...compFcScenario.map((f) => ({
-      label: monthLabel(f.month), actual: null, fc: f.point,
-      band: [f.q10, f.q90] as [number, number], q10: f.q10, q90: f.q90,
-    })),
+    ...compFcScenario.map((f) => {
+      const hw = Math.max(f.point - f.q10, f.q90 - f.point);
+      return {
+        label: monthLabel(f.month), actual: null, fc: f.point,
+        band: [f.point - hw, f.point + hw] as [number, number], q10: f.q10, q90: f.q90,
+      };
+    }),
   ];
   // anchor the forecast line to the last actual point so it is continuous
   if (compActuals.length > 0) {
@@ -280,6 +283,7 @@ export default function AilForecast() {
     totalChart[anchorIdx] = { ...totalChart[anchorIdx], fc: compActuals[anchorIdx].actual_mt };
   }
   const boundaryLabel = compFcScenario[0] ? monthLabel(compFcScenario[0].month) : null;
+  const lastAct = compActuals[compActuals.length - 1];
   const annualLo = compFcScenario.reduce((a, f) => a + f.q10, 0);
   const annualHi = compFcScenario.reduce((a, f) => a + f.q90, 0);
   const lastFcMonth = compFcBase[compFcBase.length - 1]?.month ?? "—";
@@ -303,7 +307,7 @@ export default function AilForecast() {
     { k: "12-Month Forecast", v: `${fmt(annualBase)} MT`, s: "MT steel", hi: true, chip: `${d.horizon_months}-mo horizon`, accent: "var(--acc-demand)" },
     { k: "Forecast Value", v: `৳ ${crore(d.value_summary?.forecast_value_12m)} cr`, s: `at ৳${fmt(d.value_summary?.price_per_mt)} / MT`, hi: true, accent: "var(--acc-demand)" },
     { k: "vs Last 12 Months", v: pct(yoyPct), s: `Last 12m: ${fmt(last12Sum)} MT`, delta: yoyPct >= 0 ? "▲" : "▼", deltaColor: yoyPct >= 0 ? "var(--good)" : "var(--crit)", accent: "var(--acc-demand)" },
-    { k: "Model", v: champion, s: wapeAll != null ? `Holdout WAPE ${(wapeAll * 100).toFixed(1)}%` : "Holdout WAPE —", chip: `run ${d.run_id ?? "—"}`, accent: "var(--acc-model)" },
+    { k: "Model", v: champion, s: wapeAll != null ? `Holdout WAPE ${(wapeAll * 100).toFixed(1)}%` : "Holdout WAPE —", accent: "var(--acc-demand)" },
   ];
 
   return (
@@ -352,7 +356,7 @@ export default function AilForecast() {
                 <div className="kpi-label">{x.k}</div>
                 {x.chip && <span className="chip">{x.chip}</span>}
               </div>
-              <div className="kpi-value mt-1.5 flex items-center gap-1.5" style={{ color: x.hi ? "var(--brand)" : "var(--ink)" }}>
+              <div className="kpi-value mt-1.5 flex items-center gap-1.5" style={{ color: "var(--ink)" }}>
                 {x.v}
                 {x.delta && (
                   <span className={x.deltaColor === "var(--good)" ? "badge badge-good" : "badge badge-crit"} aria-hidden>
@@ -411,6 +415,12 @@ export default function AilForecast() {
           </div>
           <ResponsiveContainer width="100%" height={340}>
             <ComposedChart data={totalChart} margin={{ left: 8, right: 12, top: 14, bottom: 18 }}>
+              <defs>
+                <linearGradient id="bandGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--c-band)" stopOpacity={0.8} />
+                  <stop offset="100%" stopColor="var(--c-band)" stopOpacity={0.2} />
+                </linearGradient>
+              </defs>
               <CartesianGrid stroke="var(--grid)" strokeDasharray="2 4" />
               <XAxis dataKey="label" stroke="transparent" tick={{ fill: "var(--muted)", fontSize: 9 }} minTickGap={22} interval="preserveStartEnd" />
               <YAxis stroke="transparent" tick={{ fill: "var(--muted)", fontSize: 10 }} tickFormatter={(v) => fmt(v)} width={54} />
@@ -422,17 +432,21 @@ export default function AilForecast() {
                 }}
                 contentStyle={{ background: "var(--surface-1)", border: "1px solid var(--grid)", borderRadius: 10, fontSize: 12, boxShadow: "var(--shadow)" }}
               />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
+              <Legend verticalAlign="top" align="left" wrapperStyle={{ fontSize: 11, paddingBottom: 4 }} />
               {/* 80% band (range area over [q10, q90]) */}
-              <Area dataKey="band" type="monotone" stroke="none" fill="var(--c-band)" fillOpacity={0.55}
-                    connectNulls isAnimationActive={false} activeDot={false} name="80% band" />
+              <Area dataKey="band" type="monotone" stroke="var(--c-band)" strokeWidth={1} fill="url(#bandGrad)"
+                    connectNulls isAnimationActive={false} activeDot={false} name="80% range" />
               <Line dataKey="actual" name="Actual" stroke="var(--c-actual)" strokeWidth={2} dot={false} isAnimationActive={false} />
               <Line dataKey="fc" name="Forecast" stroke="var(--c-forecast)" strokeWidth={2.6}
                     dot={{ r: 3, fill: "var(--c-forecast)", stroke: "var(--surface-1)", strokeWidth: 2 }}
                     connectNulls isAnimationActive={false} />
               {boundaryLabel && (
                 <ReferenceLine x={boundaryLabel} stroke="var(--axis)" strokeDasharray="4 4"
-                               label={{ value: "Forecast", position: "insideTopRight", fill: "var(--muted)", fontSize: 10 }} />
+                               label={{ value: "Forecast ▸", position: "insideTopRight", fill: "var(--muted)", fontSize: 10 }} />
+              )}
+              {lastAct && (
+                <ReferenceDot x={monthLabel(lastAct.month)} y={lastAct.actual_mt} r={4}
+                              fill="var(--c-forecast)" stroke="var(--surface-1)" strokeWidth={2} />
               )}
             </ComposedChart>
           </ResponsiveContainer>
@@ -455,17 +469,17 @@ export default function AilForecast() {
                 <tbody>
                   {compFcScenario.map((f) => (
                     <tr key={f.month}>
-                      <td className="font-medium" style={{ color: "var(--c-forecast)" }}>{monthLabel(f.month)}</td>
+                      <td className="font-medium" style={{ color: "var(--ink)" }}>{monthLabel(f.month)}</td>
                       <td className="num" style={{ color: "var(--c-forecast)" }}>{fmt(f.point)}</td>
                       <td className="num" style={{ color: "var(--c-forecast)" }}>{crore(f.value)}</td>
                       <td className="num" style={{ color: "var(--muted)" }}>{fmt(f.q10)}</td>
                       <td className="num" style={{ color: "var(--muted)" }}>{fmt(f.q90)}</td>
                     </tr>
                   ))}
-                  <tr style={{ borderTop: "2px solid var(--brand)", fontWeight: 600 }}>
+                  <tr style={{ borderTop: "2px solid var(--c-forecast)", fontWeight: 600 }}>
                     <td>Annual Total</td>
-                    <td className="num" style={{ color: "var(--brand)" }}>{fmt(annualScenario)}</td>
-                    <td className="num" style={{ color: "var(--brand)" }}>{crore(annualValueScenario)}</td>
+                    <td className="num" style={{ color: "var(--c-forecast)" }}>{fmt(annualScenario)}</td>
+                    <td className="num" style={{ color: "var(--c-forecast)" }}>{crore(annualValueScenario)}</td>
                     <td className="num" style={{ color: "var(--muted)" }}>{fmt(annualLo)}</td>
                     <td className="num" style={{ color: "var(--muted)" }}>{fmt(annualHi)}</td>
                   </tr>
@@ -493,10 +507,10 @@ export default function AilForecast() {
                       <td className="num">{crore(a.actual_value)}</td>
                     </tr>
                   ))}
-                  <tr style={{ borderTop: "2px solid var(--brand)", fontWeight: 600 }}>
+                  <tr style={{ borderTop: "2px solid var(--c-forecast)", fontWeight: 600 }}>
                     <td>Total</td>
-                    <td className="num" style={{ color: "var(--brand)" }}>{fmt(last12Sum)}</td>
-                    <td className="num" style={{ color: "var(--brand)" }}>{crore(last12Value)}</td>
+                    <td className="num" style={{ color: "var(--ink)" }}>{fmt(last12Sum)}</td>
+                    <td className="num" style={{ color: "var(--ink)" }}>{crore(last12Value)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -715,7 +729,8 @@ export default function AilForecast() {
       <footer className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mt-8 pt-4 px-1"
               style={{ borderTop: "1px solid var(--grid)", color: "var(--muted)", fontSize: 11 }}>
         <div>
-          AIL steel forecast · generated {d.generated_at} · run {d.run_id ?? "—"}
+          <div>Data as of {d.generated_at} · run {d.run_id ?? "—"} · source: AIL monthly sales</div>
+          <div>AIL steel forecast</div>
         </div>
         <div>
           Demand Forecast — 12-month statistical forecast for AIL steel (sales-based).
