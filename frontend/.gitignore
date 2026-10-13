@@ -1,6 +1,6 @@
 node_modules/
 .next/
-out/
+# out/ is committed as the static export for deploy
 *.tsbuildinfo
 .env*.local
 .DS_Store

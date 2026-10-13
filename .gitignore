@@ -43,6 +43,8 @@ __pycache__/
 node_modules/
 .next/
 out/
+!frontend/out/
+!frontend/out/**
 *.tsbuildinfo
 # ---- local db / secrets ----
 *.sqlite3
