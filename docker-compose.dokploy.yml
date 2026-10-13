@@ -18,8 +18,8 @@ services:
     volumes:
       - ./frontend/out:/usr/share/nginx/html:ro
       - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       - api
     restart: unless-stopped
