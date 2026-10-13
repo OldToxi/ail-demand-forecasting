@@ -9,13 +9,14 @@ import PageHeader from "@/components/PageHeader";
 import { ErrorCard, PageSkeleton } from "@/components/States";
 
 // ── Types ────────────────────────────────────────────────────────
-type FPoint = { month: string; horizon: number; point: number; q025: number; q10: number; q50: number; q90: number; q975: number };
-type Act = { month: string; actual_mt: number; provisional: boolean; constrained: boolean };
+type FPoint = { month: string; horizon: number; point: number; q025: number; q10: number; q50: number; q90: number; q975: number; value?: number };
+type Act = { month: string; actual_mt: number; actual_value?: number; provisional: boolean; constrained: boolean };
 type Selection = {
   selected_models: string[]; best_model: string; best_wape: number; reason: string; fallback_to_naive: boolean; weights?: number[];
 };
 type Detail = {
   series_id: string;
+  price_per_mt?: number;
   actuals: Act[];
   forecasts: Record<string, FPoint[]>;
   selection: Record<string, Selection>;
@@ -30,6 +31,7 @@ type PerSeriesHoldout = { wape: number; n: number; cov80: number; cov95: number 
 type UIPayload = {
   generated_at: string; run_id: string; label: string; horizon_months: number;
   scenarios: string[]; caveats: string[];
+  value_summary?: { currency: string; price_per_mt: number; forecast_value_12m: number; last12_value: number };
   holdout: {
     origin?: string; wape_all?: number; cov80_all?: number; cov95_all?: number;
     per_series?: Record<string, PerSeriesHoldout>; coverage?: Record<string, unknown>;
@@ -51,6 +53,9 @@ const monthLabel = (m: string): string => `${MONTHS[+m.slice(5, 7) - 1]} '${m.sl
 
 const sumPoints = (arr: FPoint[]): number => arr.reduce((a, f) => a + f.point, 0);
 const sumActuals = (arr: Act[]): number => arr.reduce((a, x) => a + x.actual_mt, 0);
+
+// crore = 10,000,000 (1e7)
+const crore = (v?: number | null): string => (v == null ? "—" : `${(v / 1e7).toFixed(1)}`);
 
 // one row of the continuous past→forecast series
 type TotalChartRow = {
@@ -230,6 +235,8 @@ export default function AilForecast() {
   const annualBase = sumPoints(compFcBase);
   const annualScenario = sumPoints(compFcScenario);
   const yoyPct = last12Sum > 0 ? ((annualBase - last12Sum) / last12Sum) * 100 : 0;
+  const annualValueScenario = compFcScenario.reduce((a, f) => a + (f.value ?? 0), 0);
+  const last12Value = last12.reduce((a, x) => a + (x.actual_value ?? 0), 0);
 
   const channelRows = d.series.filter((s) => s.level === "channel").map((s) => ({
     sid: s.series_id, name: s.channel, annual: sumPoints(d.detail[s.series_id]?.forecasts?.base ?? []),
@@ -293,10 +300,10 @@ export default function AilForecast() {
 
   type Kpi = { k: string; v: string; s: string; hi?: boolean; chip?: string; delta?: string; deltaColor?: string; accent: string };
   const kpis: Kpi[] = [
-    { k: "12-Month Forecast", v: fmt(annualBase), s: "MT steel", hi: true, chip: `${d.horizon_months}-mo horizon`, accent: "var(--acc-demand)" },
+    { k: "12-Month Forecast", v: `${fmt(annualBase)} MT`, s: "MT steel", hi: true, chip: `${d.horizon_months}-mo horizon`, accent: "var(--acc-demand)" },
+    { k: "Forecast Value", v: `৳ ${crore(d.value_summary?.forecast_value_12m)} cr`, s: `at ৳${fmt(d.value_summary?.price_per_mt)} / MT`, hi: true, accent: "var(--acc-demand)" },
     { k: "vs Last 12 Months", v: pct(yoyPct), s: `Last 12m: ${fmt(last12Sum)} MT`, delta: yoyPct >= 0 ? "▲" : "▼", deltaColor: yoyPct >= 0 ? "var(--good)" : "var(--crit)", accent: "var(--acc-demand)" },
     { k: "Model", v: champion, s: wapeAll != null ? `Holdout WAPE ${(wapeAll * 100).toFixed(1)}%` : "Holdout WAPE —", chip: `run ${d.run_id ?? "—"}`, accent: "var(--acc-model)" },
-    { k: "Top Zone", v: topZone?.name ?? "—", s: topZone ? `${pct(((topZone.annual - topZone.last12) / Math.max(topZone.last12, 1)) * 100)} vs last-12` : "—", accent: "var(--acc-region)" },
   ];
 
   return (
@@ -380,6 +387,9 @@ export default function AilForecast() {
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
               {compActuals.length} months of history plus the 12-month forecast as one continuous series with an 80% confidence band.
             </p>
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Prices ≈ ৳{fmt(companyDetail?.price_per_mt)}/MT (trailing 12m).
+            </p>
           </div>
           <div className="flex items-center gap-1.5" role="group" aria-label="Scenario">
             {(d.scenarios ?? []).map((sc) => (
@@ -437,6 +447,7 @@ export default function AilForecast() {
                   <tr>
                     <th style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Month</th>
                     <th className="num" style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Forecast (MT)</th>
+                    <th className="num" style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Value (৳ cr)</th>
                     <th className="num" style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Lo 80</th>
                     <th className="num" style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Hi 80</th>
                   </tr>
@@ -446,6 +457,7 @@ export default function AilForecast() {
                     <tr key={f.month}>
                       <td className="font-medium" style={{ color: "var(--c-forecast)" }}>{monthLabel(f.month)}</td>
                       <td className="num" style={{ color: "var(--c-forecast)" }}>{fmt(f.point)}</td>
+                      <td className="num" style={{ color: "var(--c-forecast)" }}>{crore(f.value)}</td>
                       <td className="num" style={{ color: "var(--muted)" }}>{fmt(f.q10)}</td>
                       <td className="num" style={{ color: "var(--muted)" }}>{fmt(f.q90)}</td>
                     </tr>
@@ -453,6 +465,7 @@ export default function AilForecast() {
                   <tr style={{ borderTop: "2px solid var(--brand)", fontWeight: 600 }}>
                     <td>Annual Total</td>
                     <td className="num" style={{ color: "var(--brand)" }}>{fmt(annualScenario)}</td>
+                    <td className="num" style={{ color: "var(--brand)" }}>{crore(annualValueScenario)}</td>
                     <td className="num" style={{ color: "var(--muted)" }}>{fmt(annualLo)}</td>
                     <td className="num" style={{ color: "var(--muted)" }}>{fmt(annualHi)}</td>
                   </tr>
@@ -469,6 +482,7 @@ export default function AilForecast() {
                   <tr>
                     <th style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Month</th>
                     <th className="num" style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Actual (MT)</th>
+                    <th className="num" style={{ position: "sticky", top: 0, background: "var(--surface-1)" }}>Value (৳ cr)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -476,11 +490,13 @@ export default function AilForecast() {
                     <tr key={a.month}>
                       <td className="font-medium">{monthLabel(a.month)}</td>
                       <td className="num">{fmt(a.actual_mt)}</td>
+                      <td className="num">{crore(a.actual_value)}</td>
                     </tr>
                   ))}
                   <tr style={{ borderTop: "2px solid var(--brand)", fontWeight: 600 }}>
                     <td>Total</td>
                     <td className="num" style={{ color: "var(--brand)" }}>{fmt(last12Sum)}</td>
+                    <td className="num" style={{ color: "var(--brand)" }}>{crore(last12Value)}</td>
                   </tr>
                 </tbody>
               </table>

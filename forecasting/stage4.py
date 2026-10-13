@@ -108,7 +108,7 @@ def _conformal_ensemble(y, members, sid, base_exog, origins, H, cut):
     import pandas as _pd
     from . import config as _cfg
     # per (origin_str, horizon) -> list of member preds, and the actual
-    preds, actuals = {}, {}
+    preds, actuals, pm = {}, {}, {}
     for name in members:
         base = _model_for(name)[0]
         try:
@@ -121,6 +121,7 @@ def _conformal_ensemble(y, members, sid, base_exog, origins, H, cut):
                 for r in z.itertuples():
                     key = (str(r.origin), int(r.horizon))
                     preds.setdefault(key, []).append(float(r.pred))
+                    pm.setdefault(name, {})[key] = float(r.pred)
                 continue
             rows, _ = backtest.backtest_series(y, base, {}, base_exog, origins, H, cut)
         except Exception:
@@ -131,6 +132,7 @@ def _conformal_ensemble(y, members, sid, base_exog, origins, H, cut):
             key = (str(r["origin"]), int(r["horizon"]))
             preds.setdefault(key, []).append(float(r["pred"]))
             actuals[key] = float(r["actual"])
+            pm.setdefault(name, {})[key] = float(r["pred"])
     if not preds:
         return {}, {}
     # ensemble residual per key
@@ -155,6 +157,42 @@ def _conformal_ensemble(y, members, sid, base_exog, origins, H, cut):
         act = _np.array([ actuals[(o,h)] for (o,h) in preds if a<=h<=c and (o,h) in actuals])
         cov[b] = {"cov80": round(float(((act>=lo80)&(act<=hi80)).mean()),3),
                   "cov95": round(float(((act>=lo)&(act<=hi)).mean()),3), "n": int(len(e))}
+    # ---- per-bucket ensemble WAPE: equal-weight vs inverse-WAPE weighted ----
+    def _wape(keys):
+        keys = [k for k in keys if k in actuals and preds.get(k)]
+        if not keys:
+            return None, None
+        denom = sum(abs(actuals[k]) for k in keys)
+        if denom <= 0:
+            return None, None
+        eq_wape = sum(abs(float(np.mean(preds[k])) - actuals[k]) for k in keys) / denom
+        mem_wape = {}
+        for m, mp in pm.items():
+            e = sum(abs(mp[k] - actuals[k]) for k in keys if k in mp)
+            d = sum(abs(actuals[k]) for k in keys if k in mp)
+            if d > 0:
+                mem_wape[m] = e / d
+        if not mem_wape:
+            return round(eq_wape, 4), None
+        wt = {m: 1.0 / max(w, 1e-6) for m, w in mem_wape.items()}
+        w_err = 0.0
+        for k in keys:
+            num = den = 0.0
+            for m, mp in pm.items():
+                if k in mp:
+                    num += wt[m] * mp[k]
+                    den += wt[m]
+            if den > 0:
+                w_err += abs(num / den - actuals[k])
+        return round(eq_wape, 4), round(w_err / denom, 4)
+
+    ew = {"by_bucket": {}}
+    ew["equal_all"], ew["weighted_all"] = _wape([k for k in actuals if 1 <= k[1] <= 12])
+    for b, (a, c) in buckets.items():
+        eq_b, w_b = _wape([k for k in actuals if a <= k[1] <= c])
+        ew["by_bucket"][b] = {"equal": eq_b, "weighted": w_b,
+                              "n": int(sum(1 for k in actuals if a <= k[1] <= c and preds.get(k)))}
+    cov["ensemble_wape"] = ew
     return offs, cov
 
 
@@ -182,6 +220,19 @@ def _fit_predict(name, y, train_exog, fut_exog, ext_monthly, er, H):
     Xf = _exog_with(fut_exog, var, ext_monthly, er) if m.supports_exog else None
     m.fit(y, X)
     return m.predict(H, Xf)
+
+
+def _member_weights(metrics, sid, bucket, members):
+    inv = {}
+    for m in members:
+        row = metrics[(metrics.series_id == sid) & (metrics.model == m) & (metrics.horizon_bucket == bucket)]
+        w = float(row.wape.iloc[0]) if not row.empty else None
+        if w and w > 0:
+            inv[m] = 1.0 / w
+    if not inv:
+        return {m: 1.0 / len(members) for m in members}
+    s = sum(inv.values())
+    return {m: inv.get(m, 0.0) / s for m in members}
 
 
 def select_top_accounts(piv: pd.DataFrame, origin: pd.Period, top_n: int = 20) -> list:
@@ -378,6 +429,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
                        "(offsets = -quantile(ensemble_pred - actual), lower/upper clamped to bracket the point); "
                        "coverage measured on the same residuals"}
     coverage = {}
+    ensemble_wape = {}
     for sid, g in agg.groupby("series_id"):
         y = _yser(g); exog_s = train_exog.join(external.intervention_frame(sid, cfg, train_exog.index))
         members = []
@@ -390,6 +442,16 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
             best = selection.get(sid, {}).get("short", {}).get("best_model", "ets")
             offs2, cov = _conformal(y, _model_for(best)[0], exog_s, origins, H, cut)
         calib[sid] = {"offsets": offs2, "coverage": cov}
+        if cov.get("ensemble_wape"):
+            ensemble_wape[sid] = cov["ensemble_wape"]
+    # ---- ensemble backtest WAPE (equal vs inverse-WAPE weighted) ----
+    eq_vals = [v["equal_all"] for v in ensemble_wape.values() if v.get("equal_all") is not None]
+    w_vals = [v["weighted_all"] for v in ensemble_wape.values() if v.get("weighted_all") is not None]
+    (config.OUTPUTS_DIR / "ensemble_backtest.json").write_text(json.dumps({
+        "per_series": ensemble_wape,
+        "overall": {"equal_all": round(float(np.mean(eq_vals)), 4) if eq_vals else None,
+                    "weighted_all": round(float(np.mean(w_vals)), 4) if w_vals else None},
+    }, indent=2, default=str), encoding="utf-8")
 
     # ---- external-variable best-model tests (re-emit for publish) ----
     ext_tests = item2_best_model_tests(cfg, ext_monthly, base_exog, series, origins)
@@ -426,14 +488,23 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
             final += flats[:1]
         members = list(dict.fromkeys(final))[:3] or ["seasonal_naive"]
         levelweights[sid] = round(sum(1 for m in members if m in LEVEL_TRACKERS) / len(members), 2)
-        # base ensemble
-        pts = []
+        # base ensemble: per-horizon inverse-WAPE weighted mean of member predictions
+        pred_h = {}
         for name in members:
             try:
-                pts.append(_fit_predict(name, y, exog_s, exog_s.reindex(fut_idx), ext_monthly, er, H).point)
+                pred_h[name] = _fit_predict(name, y, exog_s, exog_s.reindex(fut_idx), ext_monthly, er, H).point
             except Exception:
                 continue
-        base = np.mean(pts, axis=0) if pts else np.repeat(y.values[-1], H)
+        if pred_h:
+            base = np.zeros(H)
+            for h in range(H):
+                bucket = backtest.bucket_of(h + 1)
+                w = _member_weights(metrics, sid, bucket, members)
+                num = sum(w.get(name, 0.0) * pred_h[name][h] for name in pred_h)
+                den = sum(w.get(name, 0.0) for name in pred_h)
+                base[h] = num / den if den > 0 else float(np.mean([pred_h[name][h] for name in pred_h]))
+        else:
+            base = np.repeat(y.values[-1], H)
         # scenarios via SARIMAX delta (P0.3)
         delta, _m = _scenario_delta(y, exog_s, fut_idx, cfg, H)
         names = ["base"] + [s for s in ["disruption", "flood"] if delta and delta.get(s) is not None]

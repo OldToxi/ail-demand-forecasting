@@ -40,6 +40,8 @@ def backtest_metrics(series_df: pd.DataFrame, origins: list, cut: pd.Period, H: 
         recs = []
         for r_ in g.itertuples():
             t = str(pd.Period(r_.origin, "M") + r_.horizon)
+            if cut is not None and pd.Period(t, "M") > pd.Period(cut, "M"):
+                continue
             a = actual.get((sid, t))
             if a is None:
                 continue
@@ -58,6 +60,7 @@ def backtest_metrics(series_df: pd.DataFrame, origins: list, cut: pd.Period, H: 
 def main():
     cfg = config.load_config(); reg = config.load_sbus()
     sbu = next(s for s in reg["sbus"] if s["sbu_id"] == "AIL"); sbu["_hierarchy"] = reg["hierarchy"]
+    cut = pd.Period("2026-03", "M")
     series = build_series(sbu, config.REPO_ROOT)
     agg = series[series.level.isin(AG)][["series_id", "month", "y"]].copy()
     agg["month"] = agg["month"].astype(str)
@@ -81,6 +84,8 @@ def main():
         ae = av = 0.0; h16 = 0.0; hv = 0.0
         for r_ in g.itertuples():
             t = str(pd.Period(r_.origin, "M") + r_.horizon)
+            if cut is not None and pd.Period(t, "M") > pd.Period(cut, "M"):
+                continue
             a = actual.get((sid, t))
             if a is None:
                 continue

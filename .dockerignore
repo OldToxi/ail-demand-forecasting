@@ -1,0 +1,14 @@
+# ---- python environments / caches ----
+**/.venv*
+**/__pycache__
+
+# ---- node / next ----
+**/node_modules
+**/.next
+
+# ---- git ----
+**/.git
+
+# ---- data artifacts (the shipped forecast UI JSON under data/outputs/forecast/ui/ is kept) ----
+**/*.parquet
+**/*.xlsx

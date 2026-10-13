@@ -10,9 +10,9 @@ from .adapters import load_all
 
 
 def _agg(df: pd.DataFrame, series_id: str, level: str, channel=None, zone=None, account=None) -> pd.DataFrame:
-    g = (df.groupby("month", as_index=False)["y"].sum()
+    g = (df.groupby("month", as_index=False)[["y", "value"]].sum()
          .assign(series_id=series_id, level=level, channel=channel, zone=zone, account=account))
-    return g[["series_id", "level", "channel", "zone", "account", "month", "y"]]
+    return g[["series_id", "level", "channel", "zone", "account", "month", "y", "value"]]
 
 
 def build_series(sbu_cfg: dict, base_dir) -> pd.DataFrame:
@@ -25,39 +25,42 @@ def build_series(sbu_cfg: dict, base_dir) -> pd.DataFrame:
     for name, df in frames.items():
         d = df.copy()
         d["y"] = d["y"].fillna(0.0)
+        d["value"] = d["value"].fillna(0.0)
         out.append(_agg(d, f"{sbu_id}|channel|{name}", "channel", channel=name))
 
     # Trade zones
     tr = frames.get("Trade")
     if tr is not None:
-        t = tr.copy(); t["y"] = t["y"].fillna(0.0)
+        t = tr.copy(); t["y"] = t["y"].fillna(0.0); t["value"] = t["value"].fillna(0.0)
         for zone, zf in t.groupby("zone"):
             out.append(_agg(zf, f"{sbu_id}|zone|Trade|{zone}", "zone", channel="Trade", zone=zone))
 
     # external = Corporate + Trade
-    ext = pd.concat([frames[c][["month", "y"]] for c in h["external_channels"] if c in frames], ignore_index=True)
+    ext = pd.concat([frames[c][["month", "y", "value"]] for c in h["external_channels"] if c in frames], ignore_index=True)
     ext["y"] = ext["y"].fillna(0.0)
+    ext["value"] = ext["value"].fillna(0.0)
     out.append(_agg(ext, h["external_series"], "sbu"))
 
     # company = external + intercompany (the Intercompany channel series was already emitted above)
     if h["intercompany_channel"] in frames:
-        comp = pd.concat([ext, frames[h["intercompany_channel"]][["month", "y"]]], ignore_index=True)
+        comp = pd.concat([ext, frames[h["intercompany_channel"]][["month", "y", "value"]]], ignore_index=True)
     else:
         comp = ext
     comp["y"] = comp["y"].fillna(0.0)
+    comp["value"] = comp["value"].fillna(0.0)
     out.append(_agg(comp, h["company_series"], "company"))
 
     # Corporate account level (top-accounts layer input)
     co = frames.get(h["account_channel"])
     if co is not None:
-        c = co.copy(); c["y"] = c["y"].fillna(0.0)
+        c = co.copy(); c["y"] = c["y"].fillna(0.0); c["value"] = c["value"].fillna(0.0)
         for key, cf in c.groupby("client_key"):
             out.append(_agg(cf, f"{sbu_id}|account|{h['account_channel']}|{key}", "account",
                             channel=h["account_channel"], account=key))
 
     series = pd.concat(out, ignore_index=True)
     series = series.groupby(["series_id", "level", "channel", "zone", "account", "month"],
-                            dropna=False, as_index=False)["y"].sum()
+                            dropna=False, as_index=False)[["y", "value"]].sum()
     series.insert(1, "sbu", sbu_id)
     return series
 

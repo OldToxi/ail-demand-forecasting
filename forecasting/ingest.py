@@ -64,14 +64,14 @@ def run(sbu_id: str = "AIL", write: bool = True) -> dict:
             cm = sorted(str(m) for m in external.constraint_months(ext_monthly))
             (d / "constraint_months.json").write_text(json.dumps(cm, indent=2), encoding="utf-8")
         # actuals (schema per brief)
-        act = series.rename(columns={"y": "actual_mt"}).copy()
+        act = series.rename(columns={"y": "actual_mt", "value": "actual_value"}).copy()
         act["provisional_flag"] = act["month"].isin([pd.Period(m, "M") for m in cfg.get("provisional_months", [])])
         if ext_monthly is not None:
             cm = external.constraint_months(ext_monthly)
             act["constraint_flag"] = act["month"].isin(cm)
         else:
             act["constraint_flag"] = False
-        act[["sbu", "series_id", "month", "actual_mt", "provisional_flag", "constraint_flag"]] \
+        act[["sbu", "series_id", "month", "actual_mt", "actual_value", "provisional_flag", "constraint_flag"]] \
             .assign(sbu=sbu_id).to_parquet(d / "actuals.parquet", index=False)
         (d / "run_metadata.json").write_text(json.dumps(out, indent=2, default=str), encoding="utf-8")
         (d / "dq_gate.json").write_text(json.dumps(gate, indent=2, default=str), encoding="utf-8")

@@ -2,13 +2,25 @@
 data/
 Data/
 **/data/outputs/
+# ---- shipped forecast artifact: track data/outputs/forecast/ui/** for Docker ----
+# (git prunes excluded directories, so each parent must be re-opened, then its
+#  siblings re-ignored so only the ui/ artifact is committed)
+!data/
+data/*
+!data/outputs/
+data/outputs/*
+!data/outputs/forecast/
+data/outputs/forecast/*
+!data/outputs/forecast/ui/
+!data/outputs/forecast/ui/**
 **/data/interim/
 **/data/raw/
 *.xlsx
 *.xls
 *.parquet
 *.csv
-!forecasting/templates/*.csv      # planner upload template only
+# planner upload template only (note: .gitignore has no inline comments)
+!forecasting/templates/*.csv
 # ---- generated outputs / model caches / weights ----
 forecasting/**/outputs/
 forecasting/**/.cache/

@@ -20,6 +20,14 @@ def _r4(x):
     return None if x != x else round(x, 4)
 
 
+def _price_from_rows(rows):
+    """BDT per MT from a series' last 12 actual rows; None when there is no MT volume."""
+    last = rows[-12:]
+    mt = sum(float(r["actual_mt"]) for r in last)
+    val = sum(float(r["actual_value"]) for r in last)
+    return round(val / mt) if mt > 0 else None
+
+
 CAVEATS = [
     "Demand forecast (based on sales) - saleproxies demand.",
     "2024-25 structural break (DQ-31): level shift, not seasonality.",
@@ -103,8 +111,12 @@ def publish(stage4_run: str | None = None) -> dict:
         a = pd.read_parquet(ing / "actuals.parquet")
         for sid, g in a.groupby("series_id"):
             actuals[sid] = [{"month": str(r.month), "actual_mt": round(float(r.actual_mt), 1),
+                             "actual_value": round(float(r.actual_value), 0),
                              "provisional": bool(r.provisional_flag), "constrained": bool(r.constraint_flag)}
                             for r in g.sort_values("month").itertuples()]
+
+    company_sid = next((s for s in fc.series_id.unique() if s.split("|")[1] == "company"), None)
+    company_price = _price_from_rows(actuals.get(company_sid, [])) if company_sid else None
 
     series_meta = []
     ui_series = {}
@@ -128,6 +140,22 @@ def publish(stage4_run: str | None = None) -> dict:
         ui_series[sid] = {"series_id": sid, "actuals": actuals.get(sid, []), "forecasts": scens,
                           "selection": sel.get(sid, {}), "accuracy": acc,
                           "external_tested": [t for t in extt if t.get("series_id") == sid]}
+        series_price = _price_from_rows(actuals.get(sid, []))
+        price = series_price if series_price is not None else company_price
+        ui_series[sid]["price_per_mt"] = int(round(price)) if price is not None else None
+        for sc_rows in scens.values():
+            for row in sc_rows:
+                row["value"] = int(round(row["point"] * price)) if price is not None else None
+
+    company_base = ui_series.get(company_sid, {}).get("forecasts", {}).get("base", []) if company_sid else []
+    base_mt = sum(r["point"] for r in company_base)
+    last12 = actuals.get(company_sid, [])[-12:] if company_sid else []
+    value_summary = {
+        "currency": "BDT",
+        "price_per_mt": int(round(company_price)) if company_price is not None else None,
+        "forecast_value_12m": int(round(base_mt * company_price)) if company_price is not None else None,
+        "last12_value": int(round(sum(r["actual_value"] for r in last12))),
+    }
 
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -147,6 +175,7 @@ def publish(stage4_run: str | None = None) -> dict:
         "scenario_notes": scenarios.get("notes", []),
         "sensitivity_selected": (json.loads((s4 / "sensitivity_selected.json").read_text(encoding="utf-8"))
                                  if (s4 / "sensitivity_selected.json").exists() else {}),
+        "value_summary": value_summary,
     }
     acct_p = s4 / "top_accounts.json"
     if acct_p.exists():
