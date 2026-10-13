@@ -1,12 +1,8 @@
 services:
   web:
-    image: nginx:alpine
-    volumes:
-      - ./frontend/out:/usr/share/nginx/html:ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./data/outputs/forecast/ui/forecast_ui.json:/usr/share/nginx/api/forecast_ui.json:ro
-      - ./data/outputs/forecast/ui/planner_adjustments.json:/usr/share/nginx/api/planner_adjustments.json:ro
-      - ./forecasting/templates/planner_adjustments_template.csv:/usr/share/nginx/api/planner_adjustments_template.csv:ro
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     expose:
       - "3000"
     restart: unless-stopped
