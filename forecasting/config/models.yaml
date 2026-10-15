@@ -5,7 +5,7 @@ models:
   - {name: ma3,            enabled: true}
   - {name: ma6,            enabled: true}
   - {name: drift,          enabled: true}
-  - {name: ets,            enabled: true}
+  - {name: ets,            enabled: true}   # ETS = Holt-Winters (auto trend + seasonal + damping)
   - {name: stl_ets,        enabled: true}
   - {name: theta,          enabled: true}
   - {name: sarimax,        enabled: true}

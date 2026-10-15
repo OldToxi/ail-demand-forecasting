@@ -117,6 +117,12 @@ const MODEL_COLORS: Record<string, string> = {
   "drift": "var(--cat-8)", "sarimax": "var(--cat-4)", "stl_ets": "var(--cat-2)",
   "structural": "var(--cat-9)", "lightgbm": "var(--cat-10)",
 };
+const MODEL_LABEL: Record<string, string> = {
+  ets: "Holt-Winters (ETS)",
+  stl_ets: "STL + Holt-Winters",
+  auto_ets: "AutoETS (Holt-Winters)",
+  ets_mul: "Holt-Winters (multiplicative)",
+};
 function mc(model: string, i: number) { return MODEL_COLORS[model] ?? CATS[i % CATS.length]; }
 
 const pct = (n: number): string => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
@@ -655,9 +661,9 @@ export default function AilForecast() {
                   return (
                     <tr key={r.model} style={isChamp ? { boxShadow: "inset 3px 0 0 var(--acc-model)", background: "color-mix(in srgb, var(--acc-model) 8%, transparent)" } : undefined}>
                       <td style={{ color: "var(--muted)" }}>{idx + 1}</td>
-                      <td className="font-medium">
+                      <td className="font-medium" title={r.model}>
                         <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: mc(r.model, idx), marginRight: 5 }} />
-                        {r.model}{isChamp && <span className="chip" style={{ marginLeft: 6 }}>champion</span>}
+                        {isChamp ? "★ " : ""}{MODEL_LABEL[r.model] ?? r.model}{isChamp && <span className="chip" style={{ marginLeft: 6 }}>champion</span>}
                       </td>
                       <td className="num" style={{ color: "var(--ink-2)" }}>{wapePct(r.wape_short)}</td>
                       <td className="num" style={{ color: "var(--ink-2)" }}>{wapePct(r.wape_medium)}</td>
