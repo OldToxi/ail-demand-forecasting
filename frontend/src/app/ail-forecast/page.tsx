@@ -217,6 +217,14 @@ export default function AilForecast() {
     apiGet<UIPayload>("/forecast/" + (sbu === "ACL" ? "acl" : "ui")).then(setD).catch((e) => setErr(String(e)));
   }, [sbu]);
 
+  // Preselect the SBU from the URL (?sbu=ACL) so the landing cards deep-link correctly.
+  // Runs once on mount; it only ever flips the default "AIL" → "ACL", then the effect above refetches.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search).get("sbu");
+    if (q && q.toLowerCase() === "acl") setSbu("ACL");
+  }, []);
+
   useEffect(() => {
     const onScroll = () => {
       for (const s of [...SECTIONS].reverse()) {
