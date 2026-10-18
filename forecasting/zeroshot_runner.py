@@ -17,7 +17,7 @@ from .series import build_series
 AG = {"company", "sbu", "channel", "zone"}
 
 
-def backtest_metrics(series_df: pd.DataFrame, origins: list, cut: pd.Period, H: int):
+def backtest_metrics(series_df: pd.DataFrame, origins: list, cut: pd.Period, H: int, sbu_id: str = "AIL"):
     """Run Chronos-Bolt in a torch-first subprocess and return (metric_rows, preds_df).
 
     series_df: columns series_id, month (str or Period), y. Metric rows match metrics.parquet schema.
@@ -57,7 +57,7 @@ def backtest_metrics(series_df: pd.DataFrame, origins: list, cut: pd.Period, H: 
         scale = backtest.seasonal_naive_mae(y_sid, origins, H)
         summ = backtest.summarize(recs, scale)
         for b, m in summ.items():
-            m.update({"sbu": "AIL", "series_id": sid, "model": "chronos_bolt", "horizon_bucket": b})
+            m.update({"sbu": sbu_id, "series_id": sid, "model": "chronos_bolt", "horizon_bucket": b})
             rows.append(m)
     return rows, preds
 

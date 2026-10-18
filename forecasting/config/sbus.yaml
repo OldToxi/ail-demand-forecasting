@@ -61,12 +61,96 @@ sbus:
           quantity: Sales In MT
           value: Sales values
           collection: Collection
+    hierarchy:
+      company_series: AIL|company
+      external_series: AIL|sbu|external
+      intercompany_channel: Intercompany
+      external_channels: [Corporate, Trade]
+      trade_zone_channel: Trade
+      account_channel: Corporate
 
-# Hierarchy: composed automatically; child series sum exactly to parents.
-hierarchy:
-  company_series: AIL|company
-  external_series: AIL|sbu|external
-  intercompany_channel: Intercompany
-  external_channels: [Corporate, Trade]
-  trade_zone_channel: Trade
-  account_channel: Corporate
+  - sbu_id: ACL
+    name: Anwar Cement Limited
+    segment_code: CEM
+    min_history_months: 24
+    top_accounts: {enabled: true, n: 20, channel: Corporate}
+    sources:
+      - name: Trade
+        adapter: tabular
+        file: planning-app/data/raw/ACL-Channel wise total DataBase -2023- 30-Sep-2026.xlsx
+        sheet: Data Statement
+        header_row: 1
+        key_style: name_plus_district
+        filter: {column: Channel, value: Trade}
+        column_map:
+          date: Data
+          channel: Channel
+          zone: Zone
+          client: Dealer Name
+          district: District
+          manager: ZM Name
+          am: TM/TO Name
+          quantity: Sales in MT
+          value: Sales Value
+          collection: Collection
+      - name: Corporate
+        adapter: tabular
+        file: planning-app/data/raw/ACL-Channel wise total DataBase -2023- 30-Sep-2026.xlsx
+        sheet: Data Statement
+        header_row: 1
+        key_style: name
+        filter: {column: Channel, value: Corporate}
+        column_map:
+          date: Data
+          channel: Channel
+          zone: Zone
+          client: Dealer Name
+          district: District
+          manager: ZM Name
+          am: TM/TO Name
+          quantity: Sales in MT
+          value: Sales Value
+          collection: Collection
+      - name: Intercompany
+        adapter: tabular
+        file: planning-app/data/raw/ACL-Channel wise total DataBase -2023- 30-Sep-2026.xlsx
+        sheet: Data Statement
+        header_row: 1
+        key_style: name
+        filter: {column: Channel, value: Inter-Company}
+        column_map:
+          date: Data
+          channel: Channel
+          zone: Zone
+          client: Dealer Name
+          district: District
+          manager: ZM Name
+          am: TM/TO Name
+          quantity: Sales in MT
+          value: Sales Value
+          collection: Collection
+      - name: Export
+        adapter: tabular
+        file: planning-app/data/raw/ACL-Channel wise total DataBase -2023- 30-Sep-2026.xlsx
+        sheet: Data Statement
+        header_row: 1
+        key_style: name
+        filter: {column: Channel, value: Export}
+        column_map:
+          date: Data
+          channel: Channel
+          zone: Zone
+          client: Dealer Name
+          district: District
+          manager: ZM Name
+          am: TM/TO Name
+          quantity: Sales in MT
+          value: Sales Value
+          collection: Collection
+    hierarchy:
+      company_series: ACL|company
+      external_series: ACL|sbu|external
+      intercompany_channel: Intercompany
+      external_channels: [Corporate, Trade, Export]
+      trade_zone_channel: Trade
+      account_channel: Corporate

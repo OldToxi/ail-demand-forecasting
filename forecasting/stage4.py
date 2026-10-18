@@ -368,14 +368,16 @@ def _sensitivity_selected(y, members, exog_s, fut_idx, ext_monthly, er, H):
             "impute_12m": round(float(im.sum()), 1), "impute_pct": round(float((im.sum() - base.sum()) / denom * 100), 2)}
 
 
-def run(backtest_run: str, run_id: str | None = None) -> str:
+def run(backtest_run: str, run_id: str | None = None, sbu_id: str = "AIL") -> str:
     cfg = config.load_config(); reg = config.load_sbus(); er = config.load_external_registry()
     models_cfg = config._load("models.yaml")["models"]
     run_manifest.require_ok(backtest_run)                       # P0.1: explicit, ok-only
     metrics = pd.read_parquet(os.path.join(backtest_run, "metrics.parquet"))
     ext_monthly = external.augment_with_files(external.load_monthly(config.resolve(er["monthly_file"])), er, config.REPO_ROOT)
     cal_cols = [v["feature_key"] for v in er["variables"] if v["type"] == "known_in_advance" and v.get("transform") != "annual_level"]
-    base_exog = backtest.build_exog(ext_monthly, er, "STEEL", ext_monthly.index, cal_cols)
+    sbu = next(s for s in reg["sbus"] if s["sbu_id"] == sbu_id)
+    seg = sbu.get("segment_code", "ALL")
+    base_exog = backtest.build_exog(ext_monthly, er, seg, ext_monthly.index, cal_cols)
     extra = [c for c in ["disruption_days_full", "disruption_days_partial", "flood_major_flag"] if c in ext_monthly.columns]
     train_exog = base_exog.join(ext_monthly[extra].reindex(base_exog.index).fillna(0.0))
     origins = list(pd.period_range(cfg["backtest_origins"][0], cfg["backtest_origins"][1], freq="M"))
@@ -383,7 +385,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     cut = pd.Period("2026-03", "M"); H = cfg["horizon_months"]
     fut_idx = pd.period_range(cfg["forecast_start"], periods=H, freq="M")
 
-    sbu = next(s for s in reg["sbus"] if s["sbu_id"] == "AIL"); sbu["_hierarchy"] = reg["hierarchy"]
+    sbu["_hierarchy"] = sbu.get("hierarchy") or reg.get("hierarchy")
     series = build_series(sbu, config.REPO_ROOT)
     agg = series[series.level.isin(AG)]
 
@@ -391,7 +393,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     # ---- P0.4 external-variable candidate models: evaluate and add to the selection table ----
     cand_rows, cand_usage = [], {}
     keep_series = {}
-    for base, var, sid in CANDIDATES:
+    for base, var, sid in (CANDIDATES if sbu_id == "AIL" else []):
         keep_series.setdefault(sid, []).append(var)
         g = agg[agg.series_id == sid]
         if g.empty:
@@ -405,7 +407,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
         summ = backtest.summarize(rows, scale)
         name = f"{base}+{var}"
         for b, m in summ.items():
-            m.update({"sbu": "AIL", "series_id": sid, "model": name, "horizon_bucket": b, "ext_vars": var})
+            m.update({"sbu": sbu_id, "series_id": sid, "model": name, "horizon_bucket": b, "ext_vars": var})
             cand_rows.append(m)
         # recent-origin WAPE (P1.6 support)
         rrows, _ = backtest.backtest_series(y, base, {}, exog_c, recent, H, cut, series_id=sid)
@@ -414,15 +416,18 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     selection = _select(metrics, k=3)
 
     # ---- P1.6 recent-origin WAPE (report only) ----
-    recent_rows = []
-    for sid, g in agg.groupby("series_id"):
-        y = _yser(g); exog_s = train_exog.join(external.intervention_frame(sid, cfg, train_exog.index))
-        for name in [m["name"] for m in models_cfg if m.get("enabled", True) and not m.get("accounts_only")]:
-            rows, _ = backtest.backtest_series(y, name, {}, exog_s, recent, H, cut, series_id=sid)
-            if rows and "skipped" not in rows[0]:
-                d = pd.DataFrame(rows); recent_rows.append({"series_id": sid, "model": name,
-                    "wape_recent": round(float(d.abs_error.sum() / max(d.actual.abs().sum(), 1)), 4)})
-    recent_df = pd.DataFrame(recent_rows)
+    if sbu_id == "AIL":
+        recent_rows = []
+        for sid, g in agg.groupby("series_id"):
+            y = _yser(g); exog_s = train_exog.join(external.intervention_frame(sid, cfg, train_exog.index))
+            for name in [m["name"] for m in models_cfg if m.get("enabled", True) and not m.get("accounts_only")]:
+                rows, _ = backtest.backtest_series(y, name, {}, exog_s, recent, H, cut, series_id=sid)
+                if rows and "skipped" not in rows[0]:
+                    d = pd.DataFrame(rows); recent_rows.append({"series_id": sid, "model": name,
+                        "wape_recent": round(float(d.abs_error.sum() / max(d.actual.abs().sum(), 1)), 4)})
+        recent_df = pd.DataFrame(recent_rows)
+    else:
+        recent_df = pd.DataFrame()
 
     # ---- conformal intervals + coverage (P1.8) ----
     calib = {"method": "conformal on the selected ensemble's out-of-sample residuals per series x bucket "
@@ -454,7 +459,10 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     }, indent=2, default=str), encoding="utf-8")
 
     # ---- external-variable best-model tests (re-emit for publish) ----
-    ext_tests = item2_best_model_tests(cfg, ext_monthly, base_exog, series, origins)
+    if sbu_id == "AIL":
+        ext_tests = item2_best_model_tests(cfg, ext_monthly, base_exog, series, origins)
+    else:
+        ext_tests = []
 
     # ---- final forecast (base + SARIMAX-delta scenarios) + reconciliation ----
     forecasts, provisional, levelweights, sc_coefs, sc_table = [], {}, {}, {}, []
@@ -513,7 +521,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
             arr = base + (delta.get(scen, 0.0) if scen != "base" and delta else 0.0)
             for i, per in enumerate(fut_idx):
                 b = backtest.bucket_of(i + 1); o = offs_s.get(b) or {}
-                forecasts.append({"sbu": "AIL", "series_id": sid, "month": str(per), "horizon": i + 1,
+                forecasts.append({"sbu": sbu_id, "series_id": sid, "month": str(per), "horizon": i + 1,
                                   "scenario": scen, "model": ",".join(members),
                                   "point_forecast_mt": round(float(arr[i]), 1),
                                   "q025": round(float(arr[i] + o.get(0.025, 0.0)), 1),
@@ -544,7 +552,7 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
                             "pct_change": round(float(ch), 2), "flag_sensitive": bool(abs(ch) > 3)}
         sensitivity_selected[sid] = _sensitivity_selected(y, members, exog_s, fut_idx, ext_monthly, er, H)
     fc = pd.DataFrame(forecasts)
-    fc = _reconcile_forecasts(fc)
+    fc = _reconcile_forecasts(fc, sbu_id, sbu["_hierarchy"])
 
     # ---- top-accounts corrected comparison (P0.2) ----
     topacc = _top_accounts_backtest(series, train_exog, origins, cut, H)
@@ -633,19 +641,24 @@ def run(backtest_run: str, run_id: str | None = None) -> str:
     return str(d)
 
 
-def _reconcile_forecasts(df: pd.DataFrame) -> pd.DataFrame:
+def _reconcile_forecasts(df: pd.DataFrame, sbu_id: str, h: dict) -> pd.DataFrame:
     qcols = ["point_forecast_mt", "q025", "q10", "q50", "q90", "q975"]
-    zones = ["AIL|zone|Trade|Dhaka", "AIL|zone|Trade|North", "AIL|zone|Trade|North East", "AIL|zone|Trade|South"]
+    trade = f"{sbu_id}|channel|{h['trade_zone_channel']}"
+    ext_id = f"{sbu_id}|sbu|external"
+    ic_id = f"{sbu_id}|channel|{h['intercompany_channel']}"
+    comp_id = f"{sbu_id}|company"
+    zones = [c for c in df["series_id"].unique() if c.startswith(f"{sbu_id}|zone|{h['trade_zone_channel']}|")]
     for sc in df["scenario"].unique():
         for q in qcols:
             piv = df[df.scenario == sc].pivot_table(index="month", columns="series_id", values=q, aggfunc="sum")
             z = [c for c in zones if c in piv.columns]
-            if z and "AIL|channel|Trade" in piv.columns:
-                piv["AIL|channel|Trade"] = piv[z].sum(axis=1)
-            if {"AIL|channel|Corporate", "AIL|channel|Trade"} <= set(piv.columns):
-                piv["AIL|sbu|external"] = piv["AIL|channel|Corporate"] + piv["AIL|channel|Trade"]
-            if {"AIL|sbu|external", "AIL|channel|Intercompany"} <= set(piv.columns):
-                piv["AIL|company"] = piv["AIL|sbu|external"] + piv["AIL|channel|Intercompany"]
+            if z and trade in piv.columns:
+                piv[trade] = piv[z].sum(axis=1)
+            ext_present = [f"{sbu_id}|channel|{c}" for c in h["external_channels"] if f"{sbu_id}|channel|{c}" in piv.columns]
+            if ext_present:
+                piv[ext_id] = piv[ext_present].sum(axis=1)
+            if {ext_id, ic_id} <= set(piv.columns):
+                piv[comp_id] = piv[ext_id] + piv[ic_id]
             for sid in piv.columns:
                 for m in piv.index:
                     df.loc[(df.scenario == sc) & (df.series_id == sid) & (df.month == m), q] = round(float(piv.loc[m, sid]), 1)
@@ -656,8 +669,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backtest-run", required=True)
     ap.add_argument("--run-id", default=None)
+    ap.add_argument("--sbu", default="AIL")
     a = ap.parse_args()
-    run(a.backtest_run, a.run_id)
+    run(a.backtest_run, a.run_id, a.sbu)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ def run(sbu_id: str = "AIL", write: bool = True) -> dict:
     base_dir = config.REPO_ROOT
 
     sbu_cfg = next(s for s in reg["sbus"] if s["sbu_id"] == sbu_id)
-    sbu_cfg["_hierarchy"] = reg["hierarchy"]
+    sbu_cfg["_hierarchy"] = sbu_cfg.get("hierarchy") or reg.get("hierarchy")
 
     frames = load_all(sbu_cfg, base_dir)
     series = series_mod.build_series(sbu_cfg, base_dir)

@@ -20,7 +20,7 @@ def main():
     a = ap.parse_args()
 
     print("[1/5] ingest + DQ gate ...")
-    ingest.run(a.sbu)
+    ing = ingest.run(a.sbu)
     print("[2/5] backtest ...")
     if a.skip_backtest:
         bt = a.backtest_run
@@ -29,12 +29,15 @@ def main():
     else:
         bt = run_backtest.run(sbus=a.sbu)
     print("[3/5] stage 4 (consumes backtest run", bt, ") ...")
-    s4 = stage4.run(bt)
+    s4 = stage4.run(bt, sbu_id=a.sbu)
     print("[4/5] publish ...")
-    publish.publish(s4)
+    publish.publish(s4, sbu_id=a.sbu, ingest_run=ing.get("run_id"))
     print("[5/5] planner ...")
-    planner.write_template()
-    print(planner.publish(a.adjustments))
+    if a.sbu == "AIL":
+        planner.write_template()
+        print(planner.publish(a.adjustments))
+    else:
+        print(f"planner skipped for {a.sbu}")
     print("done. stage4 run:", s4)
 
 

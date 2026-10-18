@@ -32,6 +32,7 @@ def build_series(sbu_cfg: dict, base_dir) -> pd.DataFrame:
     tr = frames.get("Trade")
     if tr is not None:
         t = tr.copy(); t["y"] = t["y"].fillna(0.0); t["value"] = t["value"].fillna(0.0)
+        t["zone"] = t["zone"].astype("string").fillna("Unassigned")
         for zone, zf in t.groupby("zone"):
             out.append(_agg(zf, f"{sbu_id}|zone|Trade|{zone}", "zone", channel="Trade", zone=zone))
 

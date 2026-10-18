@@ -24,7 +24,6 @@ def run(models: list | None = None, levels: str = "company,sbu,channel,zone", sb
                 if v["type"] == "known_in_advance" and v.get("transform") != "annual_level"]
     ext = external.augment_with_files(external.load_monthly(config.resolve(ext_reg["monthly_file"])),
                                       ext_reg, config.REPO_ROOT)
-    base_exog = backtest.build_exog(ext, ext_reg, "STEEL", ext.index, cal_cols)
     origins = list(pd.period_range(cfg["backtest_origins"][0], cfg["backtest_origins"][1], freq="M"))
     cut = pd.Period("2026-03", "M"); H = cfg["horizon_months"]
 
@@ -36,7 +35,10 @@ def run(models: list | None = None, levels: str = "company,sbu,channel,zone", sb
     statistical.reset_clip_log()
     try:
         for sbu_id in sbus.split(","):
-            sbu = next(s for s in reg["sbus"] if s["sbu_id"] == sbu_id); sbu["_hierarchy"] = reg["hierarchy"]
+            sbu = next(s for s in reg["sbus"] if s["sbu_id"] == sbu_id)
+            sbu["_hierarchy"] = sbu.get("hierarchy") or reg.get("hierarchy")
+            seg = sbu.get("segment_code", "ALL")
+            base_exog = backtest.build_exog(ext, ext_reg, seg, ext.index, cal_cols)
             series = build_series(sbu, config.REPO_ROOT)
             agg = series[series.level.isin(lv)]
             for sid, g in agg.groupby("series_id"):
@@ -68,7 +70,7 @@ def run(models: list | None = None, levels: str = "company,sbu,channel,zone", sb
                 sbu = next(s for s in reg["sbus"] if s["sbu_id"] == sbu_id)
                 s = build_series(sbu, config.REPO_ROOT)
                 all_agg.append(s[s.level.isin(lv)][["series_id", "month", "y"]])
-            zrows, _ = zeroshot_runner.backtest_metrics(pd.concat(all_agg, ignore_index=True), origins, cut, H)
+            zrows, _ = zeroshot_runner.backtest_metrics(pd.concat(all_agg, ignore_index=True), origins, cut, H, sbu_id=sbu_id)
             if zrows:
                 metrics = pd.concat([metrics, pd.DataFrame(zrows)], ignore_index=True)
                 timings["chronos_bolt"] = timings.get("chronos_bolt", 0.0)

@@ -28,14 +28,22 @@ def _price_from_rows(rows):
     return round(val / mt) if mt > 0 else None
 
 
-CAVEATS = [
-    "Demand forecast (based on sales) - saleproxies demand.",
-    "2024-25 structural break (DQ-31): level shift, not seasonality.",
-    "2025 Trade data regime unconfirmed (DQ-30): sensitivity flagged.",
-    "2026-09 provisional; 2027 holiday dates provisional.",
-    "LC months partly interpolated (lc_interpolated_flag).",
-    "Evidence for months 7-12 is thin (few long-horizon origins).",
-]
+CAVEATS_BY_SBU = {
+    "AIL": [
+        "Demand forecast (based on sales) - saleproxies demand.",
+        "2024-25 structural break (DQ-31): level shift, not seasonality.",
+        "2025 Trade data regime unconfirmed (DQ-30): sensitivity flagged.",
+        "2026-09 provisional; 2027 holiday dates provisional.",
+        "LC months partly interpolated (lc_interpolated_flag).",
+        "Evidence for months 7-12 is thin (few long-horizon origins).",
+    ],
+    "ACL": [
+        "Demand forecast (based on cement sales) - sales proxy demand.",
+        "2026-09 provisional; future holiday dates provisional.",
+        "Evidence for months 7-12 is thin (few long-horizon origins).",
+        "Statistical baseline - combine with commercial judgment.",
+    ],
+}
 
 
 def _latest(sub: str, pointer: str | None = None):
@@ -46,7 +54,7 @@ def _latest(sub: str, pointer: str | None = None):
     return runs[-1] if runs else None
 
 
-def publish(stage4_run: str | None = None) -> dict:
+def publish(stage4_run: str | None = None, sbu_id: str = "AIL", ingest_run: str | None = None) -> dict:
     s4 = stage4_run
     if not s4:
         # consume only an "ok" stage4 manifest, never a raw "latest folder"
@@ -62,7 +70,10 @@ def publish(stage4_run: str | None = None) -> dict:
         m = json.loads((s4 / "manifest.json").read_text(encoding="utf-8"))
         if m.get("status") != "ok":
             raise SystemExit(f"stage4 run {s4} status={m.get('status')} - not consumable")
-    ing = _latest("", "latest_run.txt")
+    if ingest_run:
+        ing = config.OUTPUTS_DIR / f"run_{ingest_run}"
+    else:
+        ing = _latest("", "latest_run.txt")
     if s4 is None:
         raise SystemExit("no stage4 run found - run forecasting.stage4 first")
 
@@ -160,11 +171,12 @@ def publish(stage4_run: str | None = None) -> dict:
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "run_id": s4.name.replace("run_", ""),
-        "title": "AIL demand forecast",
+        "sbu": sbu_id,
+        "title": f"{sbu_id} demand forecast",
         "label": "Demand forecast (based on sales)",
         "horizon_months": int(fc.horizon.max()),
         "scenarios": sorted(fc.scenario.unique().tolist()),
-        "caveats": CAVEATS,
+        "caveats": CAVEATS_BY_SBU.get(sbu_id, CAVEATS_BY_SBU["AIL"]),
         "holdout": holdout,
         "series": series_meta,
         "detail": ui_series,
@@ -183,8 +195,12 @@ def publish(stage4_run: str | None = None) -> dict:
         payload["accounts_summary"] = acct
     out = config.OUTPUTS_DIR / "ui"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "forecast_ui.json").write_text(json.dumps(payload, default=str), encoding="utf-8")
-    print(f"published {len(series_meta)} series -> {out/'forecast_ui.json'}")
+    sbu_out = out / f"forecast_ui_{sbu_id}.json"
+    sbu_out.write_text(json.dumps(payload, default=str), encoding="utf-8")
+    print(f"published {len(series_meta)} series -> {sbu_out}")
+    if sbu_id == "AIL":
+        (out / "forecast_ui.json").write_text(json.dumps(payload, default=str), encoding="utf-8")
+        print(f"published {len(series_meta)} series -> {out/'forecast_ui.json'}")
     return payload
 
 

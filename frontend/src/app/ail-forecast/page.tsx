@@ -203,6 +203,7 @@ function DrillIn({ kind, name, share, annual, detail, accent, onClose }: {
 
 // ── Page ─────────────────────────────────────────────────────────
 export default function AilForecast() {
+  const [sbu, setSbu] = useState<"AIL" | "ACL">("AIL");
   const [d, setD] = useState<UIPayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [active, setActive] = useState("summary");
@@ -211,8 +212,10 @@ export default function AilForecast() {
   const [selZone, setSelZone] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<UIPayload>("/forecast/ui").then(setD).catch((e) => setErr(String(e)));
-  }, []);
+    setD(null);
+    setErr(null);
+    apiGet<UIPayload>("/forecast/" + (sbu === "ACL" ? "acl" : "ui")).then(setD).catch((e) => setErr(String(e)));
+  }, [sbu]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -310,7 +313,7 @@ export default function AilForecast() {
 
   type Kpi = { k: string; v: string; s: string; hi?: boolean; chip?: string; delta?: string; deltaColor?: string; accent: string };
   const kpis: Kpi[] = [
-    { k: "12-Month Forecast", v: `${fmt(annualBase)} MT`, s: "MT steel", hi: true, chip: `${d.horizon_months}-mo horizon`, accent: "var(--acc-demand)" },
+    { k: "12-Month Forecast", v: `${fmt(annualBase)} MT`, s: sbu === "ACL" ? "MT cement" : "MT steel", hi: true, chip: `${d.horizon_months}-mo horizon`, accent: "var(--acc-demand)" },
     { k: "Forecast Value", v: `৳ ${crore(d.value_summary?.forecast_value_12m)} cr`, s: `at ৳${fmt(d.value_summary?.price_per_mt)} / MT`, hi: true, accent: "var(--acc-demand)" },
     { k: "vs Last 12 Months", v: pct(yoyPct), s: `Last 12m: ${fmt(last12Sum)} MT`, delta: yoyPct >= 0 ? "▲" : "▼", deltaColor: yoyPct >= 0 ? "var(--good)" : "var(--crit)", accent: "var(--acc-demand)" },
     { k: "Model", v: champion, s: wapeAll != null ? `Holdout WAPE ${(wapeAll * 100).toFixed(1)}%` : "Holdout WAPE —", accent: "var(--acc-demand)" },
@@ -320,7 +323,20 @@ export default function AilForecast() {
     <>
       <PageHeader
         title="Demand Forecast"
-        subtitle="12-month statistical forecast for AIL steel (sales-based)."
+        subtitle={`12-month statistical forecast for ${sbu === "ACL" ? "ACL cement" : "AIL steel"} (sales-based).`}
+        right={
+          <div className="flex items-center gap-1" role="group" aria-label="SBU selector">
+            {(["AIL", "ACL"] as const).map((s) => (
+              <button key={s} onClick={() => setSbu(s)}
+                      aria-label={`Show ${s} forecast`}
+                      aria-pressed={sbu === s}
+                      className={`chip cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${sbu === s ? "chip-active" : ""}`}
+                      style={{ outlineColor: "var(--brand)" }}>
+                {s}
+              </button>
+            ))}
+          </div>
+        }
       />
 
       {/* ── Nav — sticky scroll-spy tab bar ── */}
@@ -735,11 +751,11 @@ export default function AilForecast() {
       <footer className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mt-8 pt-4 px-1"
               style={{ borderTop: "1px solid var(--grid)", color: "var(--muted)", fontSize: 11 }}>
         <div>
-          <div>Data as of {d.generated_at} · run {d.run_id ?? "—"} · source: AIL monthly sales</div>
-          <div>AIL steel forecast</div>
+          <div>Data as of {d.generated_at} · run {d.run_id ?? "—"} · source: {sbu === "ACL" ? "ACL" : "AIL"} monthly sales</div>
+          <div>{sbu === "ACL" ? "ACL cement forecast" : "AIL steel forecast"}</div>
         </div>
         <div>
-          Demand Forecast — 12-month statistical forecast for AIL steel (sales-based).
+          Demand Forecast — 12-month statistical forecast for {sbu === "ACL" ? "ACL cement" : "AIL steel"} (sales-based).
         </div>
       </footer>
 
