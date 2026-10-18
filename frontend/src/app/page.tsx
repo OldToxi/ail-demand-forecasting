@@ -25,7 +25,7 @@ const SBUS: { id: SBUId; label: string; industry: string; desc: string; href: st
     industry: "steel",
     desc: "12-month statistical steel demand forecast — channel, zone and corporate totals with scenarios and planner adjustments.",
     href: "/ail-forecast/?sbu=AIL",
-    accent: "var(--acc-demand)",
+    accent: "var(--brand)",
   },
   {
     id: "ACL",
@@ -33,7 +33,7 @@ const SBUS: { id: SBUId; label: string; industry: string; desc: string; href: st
     industry: "cement",
     desc: "12-month statistical cement demand forecast — channel, zone and corporate totals with scenarios and planner adjustments.",
     href: "/ail-forecast/?sbu=ACL",
-    accent: "var(--acc-region)",
+    accent: "var(--brand)",
   },
 ];
 
@@ -94,22 +94,22 @@ export default function Home() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <div className="kpi" style={{ "--accent": "var(--acc-demand)" } as CSSProperties}>
+        <div className="kpi" style={{ "--accent": "var(--brand)" } as CSSProperties}>
           <div className="kpi-label">12-Month Forecast</div>
           <div className="kpi-value mt-1.5" style={{ color: "var(--ink)" }}>{sel.companyFc == null ? "—" : `${fmt(sel.companyFc)} MT`}</div>
           <div className="kpi-sub mt-1">{sbu === "ACL" ? "MT cement" : "MT steel"}</div>
         </div>
-        <div className="kpi" style={{ "--accent": "var(--acc-demand)" } as CSSProperties}>
+        <div className="kpi" style={{ "--accent": "var(--brand)" } as CSSProperties}>
           <div className="kpi-label">Forecast Value</div>
           <div className="kpi-value mt-1.5" style={{ color: "var(--ink)" }}>{sel.value == null ? "—" : `৳ ${crore(sel.value)} cr`}</div>
           <div className="kpi-sub mt-1">12-month value</div>
         </div>
-        <div className="kpi" style={{ "--accent": "var(--acc-demand)" } as CSSProperties}>
+        <div className="kpi" style={{ "--accent": "var(--brand)" } as CSSProperties}>
           <div className="kpi-label">Model</div>
           <div className="kpi-value mt-1.5" style={{ color: "var(--ink)" }}>{sel.champion ?? "—"}</div>
           <div className="kpi-sub mt-1">champion</div>
         </div>
-        <div className="kpi" style={{ "--accent": "var(--acc-demand)" } as CSSProperties}>
+        <div className="kpi" style={{ "--accent": "var(--brand)" } as CSSProperties}>
           <div className="kpi-label">Holdout WAPE</div>
           <div className="kpi-value mt-1.5" style={{ color: "var(--ink)" }}>{sel.wape == null ? "—" : `${(sel.wape * 100).toFixed(1)}%`}</div>
           <div className="kpi-sub mt-1">holdout</div>
@@ -127,8 +127,8 @@ export default function Home() {
               className="card card-hover relative block overflow-hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{
                 outlineColor: "var(--brand)",
-                borderColor: `color-mix(in srgb, ${s.accent} ${selected ? 50 : 30}%, var(--grid))`,
-                background: selected ? `color-mix(in srgb, ${s.accent} 6%, var(--surface-1))` : undefined,
+                borderColor: selected ? "color-mix(in srgb, var(--brand) 45%, var(--grid))" : "var(--grid)",
+                background: selected ? "color-mix(in srgb, var(--brand) 6%, var(--surface-1))" : "var(--surface-1)",
               }}
             >
               <span
