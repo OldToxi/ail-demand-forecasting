@@ -478,7 +478,11 @@ export default function DemandPlanning() {
               : "the target projects historical sales forward using trend and seasonality"}
             ; it is not a national-market demand model.
           </li>
-          <li>Seasonality applied: the 12-month target is spread month-by-month using the historical monthly share.</li>
+          <li>
+            {basis === "forecast"
+              ? "Monthly values are the model's base-scenario points (no extra smoothing)."
+              : "Seasonality applied: the 12-month target is spread month-by-month using the historical monthly share."}
+          </li>
           <li>No national-market/share data: market-size and market-share levers are unavailable, so the plan is volume-only.</li>
         </ul>
       </div>
