@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/ail-forecast", label: "AIL Forecast" },
+  { href: "/demand-planning", label: "Demand Planning" },
 ];
 
 export default function Nav() {
