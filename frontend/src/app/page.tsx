@@ -24,7 +24,7 @@ const SBUS: { id: SBUId; label: string; industry: string; desc: string; href: st
     label: "AIL · Anwar Ispat Ltd.",
     industry: "steel",
     desc: "12-month statistical steel demand forecast — channel, zone and corporate totals with scenarios and planner adjustments.",
-    href: "/ail-forecast/?sbu=AIL",
+    href: "/forecast/?sbu=AIL",
     accent: "var(--brand)",
   },
   {
@@ -32,7 +32,7 @@ const SBUS: { id: SBUId; label: string; industry: string; desc: string; href: st
     label: "ACL · Anwar Cement Ltd.",
     industry: "cement",
     desc: "12-month statistical cement demand forecast — channel, zone and corporate totals with scenarios and planner adjustments.",
-    href: "/ail-forecast/?sbu=ACL",
+    href: "/forecast/?sbu=ACL",
     accent: "var(--brand)",
   },
 ];
@@ -71,10 +71,10 @@ export default function Home() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
-            Demand Forecast — AIL & ACL
+            Demand Forecast
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-            12-month statistical demand forecast for Anwar Ispat (steel) and Anwar Cement (cement).
+            12-month statistical demand forecast across Anwar Group business units.
           </p>
         </div>
         <div className="flex items-center gap-1" role="group" aria-label="SBU selector">

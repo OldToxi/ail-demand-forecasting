@@ -3,8 +3,8 @@ import "./globals.css";
 import Nav from "@/components/Nav";
 
 export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_APP_TITLE ?? "AIL Demand Forecast",
-  description: "AIL Demand Forecast — 12-month statistical demand forecast from AIL steel sales.",
+  title: process.env.NEXT_PUBLIC_APP_TITLE ?? "Anwar Group Demand Forecast",
+  description: "Multi-SBU 12-month statistical demand forecast for Anwar Group business units.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

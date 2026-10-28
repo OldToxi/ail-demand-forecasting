@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/ail-forecast", label: "AIL Forecast" },
+  { href: "/forecast", label: "Forecast" },
   { href: "/demand-planning", label: "Demand Planning" },
 ];
 
@@ -19,7 +19,7 @@ export default function Nav() {
           <span style={{ display: "inline-flex", alignItems: "center", background: "#fff", borderRadius: 8, padding: "3px 6px", boxShadow: "inset 0 0 0 1px var(--grid)" }}>
             <img src="/logo.png" alt="Anwar Group" style={{ height: 22, width: "auto", display: "block" }} />
           </span>
-          <span className="font-semibold" style={{ color: "var(--ink)" }}>{process.env.NEXT_PUBLIC_APP_TITLE ?? "AIL Demand Forecast"}</span>
+          <span className="font-semibold" style={{ color: "var(--ink)" }}>{process.env.NEXT_PUBLIC_APP_TITLE ?? "Anwar Group Demand Forecast"}</span>
         </Link>
         {links.map((l) => {
           const active = path?.startsWith(l.href);
