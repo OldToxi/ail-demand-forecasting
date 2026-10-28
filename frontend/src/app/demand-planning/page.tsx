@@ -13,6 +13,14 @@ type UIPayload = {
   series: { series_id: string; level: string; channel?: string; zone?: string; label?: string }[];
   detail: Record<string, CompanyDetail>;
 };
+type BomMaterial = { id: string; name: string; mix_pct: number; kg_per_mt_steel: number; rate: number; stock_mt: number };
+type Bom = {
+  sbu: string; as_of: string; currency: string;
+  steel_per_bar: number; metallic_yield: number;
+  charge_kg_per_mt_steel: number; material_cost_per_mt_steel: number;
+  materials: BomMaterial[];
+  energy: { name: string; value: number; unit: string }[];
+};
 
 type CagrKey = "1yr" | "2yr" | "3yr" | "5yr" | "all";
 const CAGR_KEYS: CagrKey[] = ["1yr", "2yr", "3yr", "5yr", "all"];
@@ -57,6 +65,16 @@ export default function DemandPlanning() {
   }, []);
 
   const payload = sbu === "ACL" ? data.ACL : data.AIL;
+
+  const [bom, setBom] = useState<Bom | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<Bom>("/forecast/bom")
+      .then((b) => { if (!cancelled) setBom(b); })
+      .catch(() => { if (!cancelled) setBom(null); });
+    return () => { cancelled = true; };
+  }, []);
 
   const calc = useMemo<Calc | null>(() => {
     if (!payload) return null;
@@ -158,6 +176,22 @@ export default function DemandPlanning() {
   });
   const monthlyTotal = monthly.reduce((a, x) => a + x.target, 0);
   const monthlyValueTotal = monthly.reduce((a, x) => a + (x.value ?? 0), 0);
+
+  const matRows = bom && sbu === "AIL"
+    ? (() => {
+        const planBar = monthlyTotal;
+        const steel = planBar * bom.steel_per_bar;
+        const rows = bom.materials.map((m) => {
+          const need = (steel * m.kg_per_mt_steel) / 1000;
+          const cover = need > 0 ? m.stock_mt / (need / 365) : null;
+          const buy = Math.max(0, need - m.stock_mt);
+          return { ...m, need, cover, buy, spend: buy * m.rate };
+        });
+        const spend = rows.reduce((a, r) => a + r.spend, 0);
+        const covers = rows.map((r) => r.cover).filter((c): c is number => c != null);
+        return { planBar, steel, rows, spend, minCover: covers.length ? Math.min(...covers) : 0 };
+      })()
+    : null;
 
   const growthStr = growthPct == null ? "—" : `${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%`;
 
@@ -321,6 +355,64 @@ export default function DemandPlanning() {
           </table>
         </div>
       </div>
+
+      {sbu === "AIL" && bom && matRows && (
+        <div className="card">
+          <h2 className="section-h">
+            <span className="section-bar" style={{ "--accent": "var(--acc-model)" } as CSSProperties} />
+            Raw-material plan (BOM)
+          </h2>
+          <p className="muted mt-1 text-xs">
+            Converts the 12-month bar plan above into steel and raw-material need using the AIL Oct-2026 BOM.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {[
+              { k: "Bar plan (MT)", v: fmt(matRows.planBar) },
+              { k: "Steel required (MT)", v: fmt(matRows.steel) },
+              { k: "Material purchase (৳ cr)", v: `৳ ${crore(matRows.spend)}` },
+              { k: "Tightest stock cover", v: `${matRows.minCover.toFixed(1)} d` },
+            ].map((x) => (
+              <div key={x.k} className="kpi" style={{ "--accent": "var(--acc-model)" } as CSSProperties}>
+                <div className="kpi-label">{x.k}</div>
+                <div className="kpi-value mt-1.5" style={{ color: "var(--ink)" }}>{x.v}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Material</th>
+                  <th className="num">kg / MT steel</th>
+                  <th className="num">12m need (MT)</th>
+                  <th className="num">Stock (MT)</th>
+                  <th className="num">Cover (days)</th>
+                  <th className="num">Buy (MT)</th>
+                  <th className="num">Spend (৳ cr)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matRows.rows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.name}</td>
+                    <td className="num">{fmt(r.kg_per_mt_steel, 1)}</td>
+                    <td className="num">{fmt(r.need)}</td>
+                    <td className="num">{fmt(r.stock_mt)}</td>
+                    <td className="num" style={{ color: r.cover != null && r.cover < 7 ? "var(--crit)" : undefined }}>
+                      {r.cover == null ? "—" : r.cover.toFixed(1)}
+                    </td>
+                    <td className="num">{fmt(r.buy)}</td>
+                    <td className="num">৳ {crore(r.spend)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted mt-2 text-xs">
+            Norms: {bom.steel_per_bar.toFixed(4)} MT steel / MT bar, {fmt(bom.charge_kg_per_mt_steel)} kg charge / MT steel. Stock as of {bom.as_of}; buy assumes no receipts or safety stock. Cover under 7 days is red.
+          </p>
+        </div>
+      )}
 
       {/* Notes */}
       <div className="card">

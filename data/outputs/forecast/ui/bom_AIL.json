@@ -1,0 +1,99 @@
+{
+  "sbu": "AIL",
+  "as_of": "2026-10-12",
+  "currency": "BDT",
+  "steel_per_bar": 1.044267,
+  "metallic_yield": 0.910612,
+  "charge_kg_per_mt_steel": 1098.163,
+  "material_cost_per_mt_steel": 63695.5,
+  "materials": [
+    {
+      "id": "HMSSCRAP",
+      "name": "HMS Scrap",
+      "mix_pct": 0.914052889177241,
+      "kg_per_mt_steel": 1003.77878044096,
+      "rate": 58184.0,
+      "stock_mt": 1454.459
+    },
+    {
+      "id": "SPONGEIRON",
+      "name": "Sponge Iron",
+      "mix_pct": 0.0703579259040456,
+      "kg_per_mt_steel": 77.2644492397901,
+      "rate": 46000.0,
+      "stock_mt": 144.105
+    },
+    {
+      "id": "SILICOMANGANESE",
+      "name": "Silico Manganese",
+      "mix_pct": 0.0111490305917021,
+      "kg_per_mt_steel": 12.2434494359633,
+      "rate": 130000.0,
+      "stock_mt": 14.238
+    },
+    {
+      "id": "FERROSILICON",
+      "name": "Ferro Silicon",
+      "mix_pct": 0.000491136394672049,
+      "kg_per_mt_steel": 0.539347664791951,
+      "rate": 198000.0,
+      "stock_mt": 0.994
+    },
+    {
+      "id": "FERROMANGANESE",
+      "name": "Ferro Manganese",
+      "mix_pct": 0.0,
+      "kg_per_mt_steel": 0.0,
+      "rate": 140000.0,
+      "stock_mt": 0.0
+    },
+    {
+      "id": "CASTIRON",
+      "name": "Cast Iron",
+      "mix_pct": 0.0,
+      "kg_per_mt_steel": 0.0,
+      "rate": 0.0,
+      "stock_mt": 0.0
+    },
+    {
+      "id": "MILLSCALE",
+      "name": "Mill Scale",
+      "mix_pct": 0.00394901793233922,
+      "kg_per_mt_steel": 4.33666415915055,
+      "rate": 9000.0,
+      "stock_mt": 608.365
+    }
+  ],
+  "energy": [
+    {
+      "name": "Melt-shop power \u2013 overall",
+      "value": 644.245018821818,
+      "unit": "kWh / MT steel"
+    },
+    {
+      "name": "Furnace consumables",
+      "value": 538.91206753714,
+      "unit": "Tk / MT steel"
+    },
+    {
+      "name": "CCM consumables",
+      "value": 512.680205194111,
+      "unit": "Tk / MT steel"
+    },
+    {
+      "name": "Rolling gas",
+      "value": 32.5715911891538,
+      "unit": "m\u00b3 / MT bar"
+    },
+    {
+      "name": "Rolling power \u2013 REB",
+      "value": 97.9869514837019,
+      "unit": "kWh / MT bar"
+    },
+    {
+      "name": "Rolling consumables",
+      "value": 38.9215604843596,
+      "unit": "Tk / MT bar"
+    }
+  ]
+}
