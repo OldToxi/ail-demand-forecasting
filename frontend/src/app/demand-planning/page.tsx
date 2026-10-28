@@ -218,13 +218,16 @@ export default function DemandPlanning() {
       })()
     : null;
 
-  const growthStr = growthPct == null ? "—" : `${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%`;
-  const impliedStr = impliedGrowth == null ? "—" : `${impliedGrowth >= 0 ? "+" : ""}${impliedGrowth.toFixed(1)}%`;
+  const ltm = calc.last12Mt;
+  const ltmGrowth = ltm > 0 ? (target12 / ltm - 1) * 100 : null;
+  const ltmStr = ltmGrowth == null ? "—" : `${ltmGrowth >= 0 ? "+" : ""}${ltmGrowth.toFixed(1)}%`;
+  const partial = calc.annual.find((y) => y.months < 12) ?? null;
+  const partialAnnualised = partial && partial.months > 0 ? (partial.mt / partial.months) * 12 : null;
 
   type Kpi = { k: string; v: string; s: string };
   const kpis: Kpi[] = [
-    { k: "Latest full year (MT)", v: `${fmt(calc.latestMt)} MT`, s: calc.latest != null ? `FY ${calc.latest}` : "no full year yet" },
-    { k: useFc ? "Implied growth vs FY" : "Selected CAGR (%)", v: useFc ? impliedStr : growthStr, s: useFc ? "model forecast vs FY" : `${cagrKey} CAGR` },
+    { k: "Last 12 months (MT)", v: `${fmt(ltm)} MT`, s: calc.latest != null ? `FY${calc.latest} was ${fmt(calc.latestMt)}` : "trailing 12 months" },
+    { k: "Plan vs LTM", v: ltmStr, s: useFc ? "model forecast vs LTM" : "trend plan vs LTM" },
     { k: "Target 12-month (MT)", v: `${fmt(target12)} MT`, s: useFc ? "model forecast (base)" : "next 12 months" },
     { k: "Target value (৳ cr)", v: `৳ ${crore(targetValue)} cr`, s: `at ৳${fmt(calc.price)} / MT` },
   ];
@@ -351,6 +354,11 @@ export default function DemandPlanning() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        {partial && partialAnnualised != null && (
+          <p className="muted mt-2 text-xs">
+            {partial.year} is {partial.months} months to date · annualised ≈ {fmt(partialAnnualised)} MT.
+          </p>
+        )}
       </div>
 
       {/* 12-month target */}
