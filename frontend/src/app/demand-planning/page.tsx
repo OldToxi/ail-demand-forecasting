@@ -7,7 +7,7 @@ import { ErrorCard, PageSkeleton } from "@/components/States";
 
 // ── Types ────────────────────────────────────────────────────────
 type Act = { month: string; actual_mt: number; actual_value?: number; provisional?: boolean; constrained?: boolean };
-type CompanyDetail = { actuals: Act[] };
+type CompanyDetail = { actuals: Act[]; forecasts?: { base?: { month: string; point: number; value?: number }[] } };
 type UIPayload = {
   value_summary?: { currency: string; price_per_mt: number; forecast_value_12m: number; last12_value: number };
   series: { series_id: string; level: string; channel?: string; zone?: string; label?: string }[];
@@ -47,6 +47,7 @@ type Calc = {
 export default function DemandPlanning() {
   const [sbu, setSbu] = useState<"AIL" | "ACL">("AIL");
   const [cagrKey, setCagrKey] = useState<CagrKey>("1yr");
+  const [basis, setBasis] = useState<"forecast" | "trend">("forecast");
   const [growthPct, setGrowthPct] = useState<number | null>(null);
   const [data, setData] = useState<{ AIL: UIPayload | null; ACL: UIPayload | null }>({ AIL: null, ACL: null });
   const [err, setErr] = useState<string | null>(null);
@@ -75,6 +76,18 @@ export default function DemandPlanning() {
       .catch(() => { if (!cancelled) setBom(null); });
     return () => { cancelled = true; };
   }, []);
+
+  const fcPlan = useMemo(() => {
+    if (!payload) return [] as { label: string; idx: number; target: number; value: number | null }[];
+    const company = payload.series.find((s) => s.level === "company");
+    const det = company ? payload.detail[company.series_id] : undefined;
+    return (det?.forecasts?.base ?? []).map((p) => ({
+      label: `${MONTHS[Number(p.month.slice(5, 7)) - 1]} '${p.month.slice(2, 4)}`,
+      idx: Number(p.month.slice(5, 7)) - 1,
+      target: Math.round(p.point),
+      value: p.value ?? null,
+    }));
+  }, [payload]);
 
   const calc = useMemo<Calc | null>(() => {
     if (!payload) return null;
@@ -150,9 +163,7 @@ export default function DemandPlanning() {
   if (err) return <ErrorCard error={err} />;
   if (!calc) return <PageSkeleton />;
 
-  const target12 = calc.latestMt != null ? calc.latestMt * (1 + (growthPct ?? 0) / 100) : null;
-  const targetValue = target12 != null && calc.price != null ? target12 * calc.price : null;
-
+  const trendTarget = calc.latestMt != null ? calc.latestMt * (1 + (growthPct ?? 0) / 100) : null;
   const sumSeasonality = calc.seasonality.reduce((a, b) => a + b, 0);
 
   // next 12 calendar months (starting with the current month), labeled "Mon 'YY"
@@ -164,18 +175,32 @@ export default function DemandPlanning() {
     });
   })();
 
-  // spread the 12-month target across months using historical seasonality
-  const monthly = months.map((m) => {
-    const target =
-      target12 != null && sumSeasonality > 0
-        ? Math.round((target12 * (calc.seasonality[m.idx] ?? 0)) / sumSeasonality)
-        : 0;
-    const value = calc.price != null ? target * calc.price : null;
-    const pct = target12 != null && target12 > 0 ? (target / target12) * 100 : 0;
-    return { label: m.label, target, value, pct };
-  });
-  const monthlyTotal = monthly.reduce((a, x) => a + x.target, 0);
-  const monthlyValueTotal = monthly.reduce((a, x) => a + (x.value ?? 0), 0);
+  const useFc = basis === "forecast" && fcPlan.length > 0;
+
+  // monthly bar plan: model forecast, or the trend target spread by historical seasonality
+  const monthlyBase = useFc
+    ? fcPlan
+    : months.map((m) => ({
+        label: m.label,
+        idx: m.idx,
+        target:
+          trendTarget != null && sumSeasonality > 0
+            ? Math.round((trendTarget * (calc.seasonality[m.idx] ?? 0)) / sumSeasonality)
+            : 0,
+        value: null as number | null,
+      }));
+  const monthlyTotal = monthlyBase.reduce((a, x) => a + x.target, 0);
+  const target12 = monthlyTotal;
+  const monthly = monthlyBase.map((x) => ({
+    ...x,
+    pct: monthlyTotal > 0 ? (x.target / monthlyTotal) * 100 : 0,
+  }));
+  const monthlyValueTotal = monthly.reduce(
+    (a, x) => a + (x.value ?? (calc.price != null ? x.target * calc.price : 0)),
+    0,
+  );
+  const targetValue = monthlyValueTotal;
+  const impliedGrowth = calc.latestMt ? (monthlyTotal / calc.latestMt - 1) * 100 : null;
 
   const matRows = bom && sbu === "AIL"
     ? (() => {
@@ -194,12 +219,13 @@ export default function DemandPlanning() {
     : null;
 
   const growthStr = growthPct == null ? "—" : `${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%`;
+  const impliedStr = impliedGrowth == null ? "—" : `${impliedGrowth >= 0 ? "+" : ""}${impliedGrowth.toFixed(1)}%`;
 
   type Kpi = { k: string; v: string; s: string };
   const kpis: Kpi[] = [
     { k: "Latest full year (MT)", v: `${fmt(calc.latestMt)} MT`, s: calc.latest != null ? `FY ${calc.latest}` : "no full year yet" },
-    { k: "Selected CAGR (%)", v: growthStr, s: `${cagrKey} CAGR` },
-    { k: "Target 12-month (MT)", v: `${fmt(target12)} MT`, s: "next 12 months" },
+    { k: useFc ? "Implied growth vs FY" : "Selected CAGR (%)", v: useFc ? impliedStr : growthStr, s: useFc ? "model forecast vs FY" : `${cagrKey} CAGR` },
+    { k: "Target 12-month (MT)", v: `${fmt(target12)} MT`, s: useFc ? "model forecast (base)" : "next 12 months" },
     { k: "Target value (৳ cr)", v: `৳ ${crore(targetValue)} cr`, s: `at ৳${fmt(calc.price)} / MT` },
   ];
 
@@ -207,7 +233,7 @@ export default function DemandPlanning() {
     <div className="space-y-6">
       <PageHeader
         title="Demand Planning"
-        subtitle="12-month sales target from the historical trend and seasonality."
+        subtitle={basis === "forecast" ? "12-month plan from the statistical model forecast (base scenario)." : "12-month sales target from the historical trend and seasonality."}
         right={
           <div className="flex items-center gap-1" role="group" aria-label="SBU selector">
             {(["AIL", "ACL"] as const).map((s) => (
@@ -233,33 +259,57 @@ export default function DemandPlanning() {
           Target levers
         </h2>
         <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-3">
-          <label className="text-xs" style={{ color: "var(--muted)" }}>
-            Growth window
-            <select
-              className="input ml-2"
-              value={cagrKey}
-              onChange={(e) => setCagrKey(e.target.value as CagrKey)}
-              aria-label="Growth window"
-            >
-              {CAGR_KEYS.filter((k) => calc.cagrWindows[k] != null).map((k) => (
-                <option key={k} value={k}>{k}</option>
+          <div className="text-xs" style={{ color: "var(--muted)" }}>
+            Plan basis
+            <div className="mt-1 flex items-center gap-1" role="group" aria-label="Plan basis">
+              {(["forecast", "trend"] as const).map((b) => (
+                <button
+                  key={b}
+                  onClick={() => setBasis(b)}
+                  aria-pressed={basis === b}
+                  className={`chip cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${basis === b ? "chip-active" : ""}`}
+                  style={{ outlineColor: "var(--brand)" }}
+                >
+                  {b === "forecast" ? "Forecast (model)" : "Trend growth"}
+                </button>
               ))}
-            </select>
-          </label>
-          <label className="text-xs" style={{ color: "var(--muted)" }}>
-            Growth %
-            <input
-              className="input ml-2"
-              type="number"
-              step="0.1"
-              style={{ width: 90 }}
-              value={growthPct ?? ""}
-              onChange={(e) => setGrowthPct(e.target.value === "" ? null : Number(e.target.value))}
-              aria-label="Growth percent"
-            />
-          </label>
+            </div>
+          </div>
+          {basis === "trend" && (
+            <>
+              <label className="text-xs" style={{ color: "var(--muted)" }}>
+                Growth window
+                <select
+                  className="input ml-2"
+                  value={cagrKey}
+                  onChange={(e) => setCagrKey(e.target.value as CagrKey)}
+                  aria-label="Growth window"
+                >
+                  {CAGR_KEYS.filter((k) => calc.cagrWindows[k] != null).map((k) => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs" style={{ color: "var(--muted)" }}>
+                Growth %
+                <input
+                  className="input ml-2"
+                  type="number"
+                  step="0.1"
+                  style={{ width: 90 }}
+                  value={growthPct ?? ""}
+                  onChange={(e) => setGrowthPct(e.target.value === "" ? null : Number(e.target.value))}
+                  aria-label="Growth percent"
+                />
+              </label>
+            </>
+          )}
         </div>
-        <p className="muted mt-2 text-xs">National-market share lever requires market data (not available).</p>
+        <p className="muted mt-2 text-xs">
+          {basis === "forecast"
+            ? "Monthly plan = statistical model forecast (base scenario) for the next 12 months."
+            : "Trend plan spreads the target by historical seasonality; the market-share lever needs market data (not available)."}
+        </p>
       </div>
 
       {/* 4-card KPI strip */}
@@ -421,7 +471,13 @@ export default function DemandPlanning() {
           Notes
         </h2>
         <ul className="mt-3 list-disc pl-5 text-sm" style={{ color: "var(--ink-2)", lineHeight: 1.7 }}>
-          <li>Sales-based proxy: the target projects historical sales (MT) forward; it is not a national-market demand model.</li>
+          <li>
+            Volume plan:{" "}
+            {basis === "forecast"
+              ? "the monthly plan is the statistical model forecast (base scenario)"
+              : "the target projects historical sales forward using trend and seasonality"}
+            ; it is not a national-market demand model.
+          </li>
           <li>Seasonality applied: the 12-month target is spread month-by-month using the historical monthly share.</li>
           <li>No national-market/share data: market-size and market-share levers are unavailable, so the plan is volume-only.</li>
         </ul>
