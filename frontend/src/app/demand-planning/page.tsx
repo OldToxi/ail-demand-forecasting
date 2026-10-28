@@ -441,6 +441,7 @@ export default function DemandPlanning() {
               <thead>
                 <tr>
                   <th>Material</th>
+                  <th className="num">% of charge</th>
                   <th className="num">kg / MT steel</th>
                   <th className="num">12m need (MT)</th>
                   <th className="num">Stock (MT)</th>
@@ -450,9 +451,10 @@ export default function DemandPlanning() {
                 </tr>
               </thead>
               <tbody>
-                {matRows.rows.map((r) => (
+                {matRows.rows.filter((r) => r.kg_per_mt_steel > 0).map((r) => (
                   <tr key={r.id}>
                     <td>{r.name}</td>
+                    <td className="num">{(r.mix_pct * 100).toFixed(2)}%</td>
                     <td className="num">{fmt(r.kg_per_mt_steel, 1)}</td>
                     <td className="num">{fmt(r.need)}</td>
                     <td className="num">{fmt(r.stock_mt)}</td>
